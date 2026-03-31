@@ -1,0 +1,33 @@
+# Dependencias de Node (No se deben subir, son muy pesadas)
+node_modules/
+dist/
+build/
+
+# Variables de entorno (Contienen claves secretas y tokens)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs del sistema y errores
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Archivos de configuración de editores (VS Code, IntelliJ, etc)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos temporales del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Carpeta dedicada para tus BACKUPS manuales
+# Aquí puedes guardar tus zips o volcados de base de datos
+backups/
+*.bak
+*.tmp
