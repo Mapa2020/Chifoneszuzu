@@ -1,4 +1,4 @@
-import React,{ useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -72,7 +72,6 @@ function AppContent() {
   const isAdmin = user.rol?.toLowerCase() === 'admin' || 
                   user.rol?.toLowerCase() === 'administrador';
   const isCliente = user.rol === 'Cliente';
-  const isVendedor = user.rol === 'Vendedor';
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -85,14 +84,16 @@ function AppContent() {
       >
         <div className={cn("flex flex-col h-full transition-all duration-300", isSidebarOpen ? "p-6" : "p-4")}>
           <div className={cn("flex items-center mb-10 px-2 transition-all duration-300", isSidebarOpen ? "gap-3" : "justify-center gap-0")}>
-            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
-              <Package size={24} />
-            </div>
+            <img 
+              src="/images/mascota_zuzu.png" 
+              alt="Mascota Zuzu" 
+              className="w-10 h-10 object-contain shrink-0" 
+            />
             <h1 className={cn(
               "text-xl font-bold tracking-tight text-slate-800 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap",
               isSidebarOpen ? "opacity-100 translate-x-0 w-auto" : "opacity-0 -translate-x-4 w-0"
             )}>
-              Chifón Master
+              Chifónes ZUZÚ
             </h1>
           </div>
 
@@ -172,21 +173,27 @@ function AppContent() {
 
         <div className="p-8 overflow-auto">
           <Routes>
-            {!isCliente ? (
-              <>
+            {isCliente ? (
+              <Route path="*" element={<PedidoCliente />} />
+            ) : (
+              <React.Fragment>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ventas" element={<Ventas />} />
-                {isAdmin && <Route path="/productos" element={<Productos />} />}
-                {isAdmin && <Route path="/insumos" element={<Insumos />} />}
-                {isAdmin && <Route path="/reportes" element={<ReporteMensual />} />}
-                {isAdmin && <Route path="/usuarios" element={<Usuarios />} />}
-                {isAdmin && <Route path="/proveedores" element={<Proveedores />} />}
                 <Route path="/clientes" element={<Clientes />} />
                 <Route path="/egresos" element={<Egresos />} />
                 <Route path="/contenedores" element={<Contenedores />} />
-              </>
-            ) : (
-              <Route path="*" element={<PedidoCliente />} />
+                {isAdmin && (
+                  <React.Fragment>
+                    <Route path="/productos" element={<Productos />} />
+                    <Route path="/insumos" element={<Insumos />} />
+                    <Route path="/reportes" element={<ReporteMensual />} />
+                    <Route path="/usuarios" element={<Usuarios />} />
+                    <Route path="/proveedores" element={<Proveedores />} />
+                  </React.Fragment>
+                )}
+                {/* Ruta de respaldo para Admin/Vendedor */}
+                <Route path="*" element={<Dashboard />} />
+              </React.Fragment>
             )}
           </Routes>
         </div>

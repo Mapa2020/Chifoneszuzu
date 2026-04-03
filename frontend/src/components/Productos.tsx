@@ -46,11 +46,14 @@ export default function Productos() {
     // Si es un producto nuevo y no tiene ingredientes aún, cargamos la base
     if (!editingId && recetaItems.length === 0) {
       const baseIngredients = [
-        { search: 'Harina', qty: 0.5 },
-        { search: 'Huevo', qty: 6 },
-        { search: 'Azúcar', qty: 0.3 },
-        { search: 'Aceite', qty: 0.1 },
-        { search: 'Polvo', qty: 0.015 } // Polvo de hornear
+        { search: 'Harina', qty: 0.285 },
+        { search: 'Huevo', qty: 8 },
+        { search: 'Azúcar', qty: 0.25 },
+        { search: 'Aceite', qty: 0.14},
+        { search: 'Sal', qty: 0.05},
+        { search: 'Maizena', qty: 0.032},
+        { search: 'Cremor Tartaro', qty: 0.025},
+        { search: 'Polvo', qty: 0.02 } // Polvo de hornear
       ];
 
       const loadedBase = baseIngredients.map(base => {
@@ -59,7 +62,7 @@ export default function Productos() {
           return {
             ingrediente_id: found.ingrediente_id,
             nombre: found.nombre,
-            cantidad_necesaria: base.qty,
+            cantidad_necesaria: Number(base.qty), // Asegura que sea un número
             unidad: found.unidad_medida,
             costo_unitario: found.costo_unitario || 0
           };
@@ -90,7 +93,7 @@ export default function Productos() {
         precio_externo: fullData.precio_externo.toString(),
         precio_especial: fullData.precio_especial.toString()
       });
-      setRecetaItems(fullData.receta || []);
+      setRecetaItems((fullData.receta || []).map((item: any) => ({ ...item, cantidad_necesaria: Number(item.cantidad_necesaria) || 0 }))); // Asegura que sean números
     } else {
       setEditingId(null);
       setFormData({ nombre: '', sabor: '', precio_snack: '', precio_externo: '', precio_especial: '' });
@@ -117,7 +120,7 @@ export default function Productos() {
     setRecetaItems([...recetaItems, {
       ingrediente_id: ing.ingrediente_id,
       nombre: ing.nombre,
-      cantidad_necesaria: parseFloat(cantidadIng),
+      cantidad_necesaria: parseFloat(cantidadIng) || 0, // Asegura que sea un número, por defecto 0
       unidad: ing.unidad_medida,
       costo_unitario: ing.costo_unitario || 0
     }]);

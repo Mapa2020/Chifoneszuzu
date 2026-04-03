@@ -35,7 +35,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, authorizeRole(['Admin']), async (req, res) => {
+router.post('/', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();

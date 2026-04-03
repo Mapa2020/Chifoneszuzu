@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { Lock, User, Package, Loader2 } from 'lucide-react';
+import { Lock, User, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -39,10 +39,12 @@ export default function Login() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-200 mx-auto mb-4">
-            <Package size={32} />
-          </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Chifón Master</h1>
+          <img 
+            src="/images/logo_zuzu.png" 
+            alt="Logo Zuzu" 
+            className="w-24 h-24 object-contain mx-auto mb-4" 
+          />
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Chifónes ZUZÚ</h1>
           <p className="text-slate-500 mt-2 font-medium">Panel de Gestión Administrativa</p>
         </div>
 

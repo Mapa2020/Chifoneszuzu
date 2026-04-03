@@ -10,6 +10,8 @@ import {
   DollarSign,
   Check,
   MessageCircle,
+  Database,
+  ShieldCheck,
   Search,
   UserCheck
 } from 'lucide-react';
@@ -28,6 +30,7 @@ import {
 import { formatCurrency, cn } from '../lib/utils';
 import { DashboardStats, MonthlyReportData, Venta, Cliente } from '../types';
 import { useAuth } from '../AuthContext';
+import { toast } from 'sonner';
 
 interface StatCardProps {
   title: string;
@@ -72,6 +75,7 @@ export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [monthlyData, setMonthlyData] = useState<MonthlyReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
   const [searchCliente, setSearchCliente] = useState('');
 
   useEffect(() => {
@@ -117,6 +121,26 @@ export default function Dashboard() {
     return clientes.find(c => c.nombre.toLowerCase().includes(searchCliente.toLowerCase()) || c.cliente_id.toString() === searchCliente);
   }, [clientes, searchCliente]);
 
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      const res = await fetch('/api/admin/backup', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Respaldo del Sistema", { description: data.message });
+      } else {
+        toast.error(data.error || "No se pudo realizar el respaldo.");
+      }
+    } catch (error) {
+      toast.error("Error de conexión con el servidor");
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
   // Consolidar datos para el gráfico comparativo
   const chartData = useMemo(() => {
     if (!monthlyData?.details?.dailySales) return [];
@@ -142,7 +166,7 @@ export default function Dashboard() {
     let message = "*🚨 REPORTE DE STOCK CRÍTICO - CHIFONES ZUZÚ* %0A";
     message += "------------------------------------%0A";
     stats.lowStockItems.forEach(item => {
-      message += `• *${item.nombre}*: Quedan ${item.stock_actual} ${item.unidad_medida}%0A`;
+      message += `• *${item.nombre}*: Quedan ${Number(item.stock_actual).toFixed(3)} ${item.unidad_medida}%0A`;
     });
     message += "------------------------------------%0A";
     message += "_Generado automáticamente desde el Panel de Control._";
@@ -327,7 +351,7 @@ export default function Dashboard() {
                 <div key={i} className="flex items-center justify-between p-4 bg-rose-50 rounded-xl border border-rose-100">
                   <div>
                     <p className="font-bold text-rose-900 text-sm">{item.nombre}</p>
-                    <p className="text-xs text-rose-600">Quedan solo {item.stock_actual} {item.unidad_medida}</p>
+                    <p className="text-xs text-rose-600">Quedan solo {Number(item.stock_actual).toFixed(3)} {item.unidad_medida}</p>
                   </div>
                   <div className="w-8 h-8 bg-rose-500 text-white rounded-lg flex items-center justify-center">
                     <AlertCircle size={18} />
@@ -387,6 +411,27 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+              <ShieldCheck size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800">Administración Global</h3>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">Ejecuta tareas de mantenimiento y seguridad del sistema.</p>
+          <button 
+            onClick={handleBackup}
+            disabled={backingUp}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl font-bold transition-all",
+              backingUp ? "bg-slate-100 text-slate-400" : "bg-slate-800 text-white hover:bg-slate-900 shadow-lg shadow-slate-200"
+            )}
+          >
+            {backingUp ? <div className="animate-spin h-5 w-5 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Database size={18} />}
+            {backingUp ? "Generando Respaldo..." : "Crear Backup del Sistema"}
+          </button>
         </div>
       </div>
     </div>

@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Printer,
   Check,
-  User
+  User,
+  Pencil
 } from 'lucide-react';
 import { 
   flexRender, 
@@ -64,7 +65,9 @@ export default function Ventas() {
   const [recetas, setRecetas] = useState<any[]>([]);
   const [detalles, setDetalles] = useState<DetalleVentaTmp[]>([]);
   const [clienteId, setClienteId] = useState<string>('');
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formaPago, setFormaPago] = useState<string>('Contado');
+  const [fechaVenta, setFechaVenta] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const selectedCliente = useMemo(() => 
     clientes.find(c => c.cliente_id === parseInt(clienteId)), 
@@ -141,7 +144,7 @@ export default function Ventas() {
     Object.entries(needed).forEach(([id, amount]) => {
       const ing = ingredientes.find(i => i.ingrediente_id === parseInt(id));
       if (ing && ing.stock_actual < amount) {
-        missing.push(`${ing.nombre} (Necesario: ${amount.toFixed(2)}${ing.unidad_medida}, Disponible: ${ing.stock_actual}${ing.unidad_medida})`);
+        missing.push(`${ing.nombre} (Necesario: ${amount.toFixed(3)}${ing.unidad_medida}, Disponible: ${Number(ing.stock_actual).toFixed(3)}${ing.unidad_medida})`);
       }
     });
 
@@ -152,27 +155,123 @@ export default function Ventas() {
                   missingStock.length === 0 && 
                   (formaPago !== 'CreditoDia' || !!clienteId);
 
+  const totalVenta = useMemo(() => 
+    detalles.reduce((acc, d) => acc + Number(d.subtotal), 0), 
+  [detalles]);
+
   const agregarProducto = (id: string) => {
     const prod = productos.find(p => p.producto_id === parseInt(id));
     if (!prod) return;
 
-// Determinar precio según categoría del cliente seleccionado
-    let precioAplicado = prod.precio_snack || prod.precio; // fallback
-    if (selectedCliente?.categoria === 'Externo') precioAplicado = prod.precio_externo;
-    if (selectedCliente?.categoria === 'Especial') precioAplicado = prod.precio_especial;
+    // Determinar precio según categoría del cliente seleccionado
+    let precioAplicado = Number(prod.precio_snack || 0);
+    if (selectedCliente?.categoria === 'Externo') precioAplicado = Number(prod.precio_externo || 0);
+    if (selectedCliente?.categoria === 'Especial') precioAplicado = Number(prod.precio_especial || 0);
 
+    setDetalles(prev => {
+      const index = prev.findIndex(d => d.producto_id === prod.producto_id);
+      if (index !== -1) {
+        // Si ya existe, incrementamos cantidad y recalculamos subtotal
+        return prev.map((item, i) => 
+          i === index 
+            ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precio_unitario }
+            : item
+        );
+      }
+      // Si es nuevo, lo añadimos
+      return [...prev, {
+        producto_id: prod.producto_id,
+        nombre: prod.nombre,
+        cantidad: 1,
+        precio_unitario: precioAplicado,
+        subtotal: precioAplicado
+      }];
+    });
+  };
 
-    setDetalles([...detalles, {
-      producto_id: prod.producto_id,
-      nombre: prod.nombre,
-      cantidad: 1,
-      precio_unitario: precioAplicado,
-      subtotal: precioAplicado
-    }]);
+  const actualizarCantidad = (index: number, nuevaCantidad: number) => {
+    if (nuevaCantidad < 1) return;
+    setDetalles(prev => prev.map((item, i) => 
+      i === index 
+        ? { ...item, cantidad: nuevaCantidad, subtotal: nuevaCantidad * item.precio_unitario }
+        : item
+    ));
   };
 
   const eliminarDetalle = (index: number) => {
     setDetalles(detalles.filter((_, i) => i !== index));
+  };
+
+  const handleEditVenta = async (venta: Venta) => {
+    try {
+      const res = await fetch(`/api/ventas/${venta.venta_id}`, {
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      });
+      const fullVenta = await res.json();
+      
+      setEditingId(fullVenta.venta_id);
+      setClienteId(fullVenta.cliente_id?.toString() || '');
+      setFormaPago(fullVenta.forma_pago);
+      setFechaVenta(fullVenta.fecha.split('T')[0]);
+      setDetalles(fullVenta.detalles.map((d: any) => ({
+        producto_id: d.producto_id,
+        nombre: d.producto_nombre,
+        cantidad: d.cantidad,
+        precio_unitario: d.precio_unitario,
+        subtotal: d.subtotal
+      })));
+      setShowModal(true);
+    } catch (error) {
+      toast.error("No se pudieron cargar los detalles para editar");
+    }
+  };
+
+  const handleDeleteVenta = async (id: number) => {
+    const motivo = prompt("Ingrese el motivo de la eliminación (Obligatorio):");
+    
+    if (motivo === null) return; // El usuario canceló el prompt
+    
+    if (!motivo.trim()) {
+      toast.error("El motivo de eliminación es obligatorio para proceder.");
+      return;
+    }
+    
+    const res = await fetch(`/api/ventas/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${user?.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo })
+    });
+    
+    if (res.ok) {
+      toast.success("Venta eliminada correctamente");
+      fetchVentas();
+    }
+  };
+
+  const handlePrintVenta = async (venta: Venta) => {
+    try {
+      const res = await fetch(`/api/ventas/${venta.venta_id}`, {
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      });
+      const fullVenta = await res.json();
+
+      setLastSale({
+        ventaId: fullVenta.venta_id,
+        cliente: fullVenta.cliente_nombre || 'Venta Directa',
+        fecha: new Date(fullVenta.fecha).toLocaleDateString(),
+        detalles: fullVenta.detalles.map((d: any) => ({
+          producto_id: d.producto_id,
+          nombre: d.producto_nombre,
+          cantidad: d.cantidad,
+          subtotal: d.subtotal
+        })),
+        total: fullVenta.total,
+        formaPago: fullVenta.forma_pago
+      });
+      setShowTicketModal(true);
+    } catch (error) {
+      toast.error("Error al cargar la venta para imprimir");
+    }
   };
 
   const handleSaveVenta = async () => {
@@ -181,17 +280,17 @@ export default function Ventas() {
       return;
     }
     
-    const total = detalles.reduce((acc, d) => acc + d.subtotal, 0);
     const payload = {
       cliente_id: clienteId || null,
-      total,
+      total: totalVenta,
       forma_pago: formaPago,
+      fecha: fechaVenta,
       detalles
     };
 
     try {
-      const res = await fetch('/api/ventas', {
-        method: 'POST',
+      const res = await fetch(editingId ? `/api/ventas/${editingId}` : '/api/ventas', {
+        method: editingId ? 'PUT' : 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user?.token}`
@@ -212,7 +311,7 @@ export default function Ventas() {
           cliente: clientes.find(c => c.cliente_id === parseInt(clienteId))?.nombre || 'Venta Directa',
           fecha: new Date().toLocaleString(),
           detalles: [...detalles],
-          total,
+          total: totalVenta,
           formaPago
         });
         setShowModal(false);
@@ -226,7 +325,7 @@ export default function Ventas() {
         if (data.alertas && data.alertas.length > 0) {
           data.alertas.forEach((alerta: any) => {
             toast.warning(`Stock Crítico: ${alerta.nombre}`, {
-              description: `Quedan solo ${alerta.stock_actual} ${alerta.unidad_medida}.`,
+              description: `Quedan solo ${Number(alerta.stock_actual).toFixed(3)} ${alerta.unidad_medida}.`,
               duration: 8000,
             });
           });
@@ -283,12 +382,24 @@ export default function Ventas() {
       header: 'Total',
       cell: info => <span className="font-bold text-slate-900">{formatCurrency(info.getValue())}</span>,
     }),
-    columnHelper.display({
+    columnHelper.display({ 
       id: 'actions',
-      cell: () => (
-        <button className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-          <MoreVertical size={16} />
-        </button>
+      cell: (info) => (
+        <div className="flex items-center gap-1">
+          <button onClick={() => handlePrintVenta(info.row.original)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400" title="Re-imprimir">
+            <Printer size={16} />
+          </button>
+          {user?.rol === 'Administrador' && (
+            <>
+              <button onClick={() => handleEditVenta(info.row.original)} className="p-1.5 hover:bg-orange-50 text-slate-400 hover:text-orange-500 rounded-lg">
+                <Pencil size={16} />
+              </button>
+              <button onClick={() => handleDeleteVenta(info.row.original.venta_id)} className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-lg">
+                <Trash2 size={16} />
+              </button>
+            </>
+          )}
+        </div>
       ),
     }),
   ];
@@ -307,7 +418,7 @@ export default function Ventas() {
           <p className="text-slate-500">Gestiona y visualiza todas las ventas realizadas.</p>
         </div>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={() => { setEditingId(null); setDetalles([]); setFechaVenta(new Date().toISOString().split('T')[0]); setShowModal(true); }}
           className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200"
         >
           <Plus size={20} />
@@ -416,7 +527,7 @@ export default function Ventas() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0">
-              <h3 className="text-xl font-bold text-slate-800">Registrar Nueva Venta</h3>
+              <h3 className="text-xl font-bold text-slate-800">{editingId ? `Editando Venta #${editingId}` : 'Registrar Nueva Venta'}</h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-2">
                 <X size={24} />
               </button>
@@ -424,6 +535,15 @@ export default function Ventas() {
             
             <div className="p-6 overflow-y-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Fecha de Venta</label>
+                  <input 
+                    type="date" 
+                    className="w-full p-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium"
+                    value={fechaVenta}
+                    onChange={(e) => setFechaVenta(e.target.value)}
+                  />
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Cliente</label>
                   <select 
@@ -479,6 +599,22 @@ export default function Ventas() {
                 </select>
               </div>
 
+              {/* Alertas de Validación */}
+              {(missingStock.length > 0 || (formaPago === 'CreditoDia' && !clienteId)) && (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
+                    <AlertTriangle size={18} />
+                    <span>No se puede confirmar la venta:</span>
+                  </div>
+                  <ul className="text-xs text-rose-500 list-disc list-inside space-y-1 ml-2">
+                    {formaPago === 'CreditoDia' && !clienteId && (
+                      <li>El Crédito del Día requiere seleccionar un Cliente.</li>
+                    )}
+                    {missingStock.map((msg, idx) => <li key={idx}>{msg}</li>)}
+                  </ul>
+                </div>
+              )}
+
               <div className="space-y-3">
                 <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Detalle del Pedido</h4>
                 <div className="space-y-2">
@@ -486,10 +622,17 @@ export default function Ventas() {
                     <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                       <div>
                         <p className="font-bold text-slate-800">{d.nombre}</p>
-                        <p className="text-xs text-slate-500">{d.cantidad} x {formatCurrency(d.precio_unitario)}</p>
+                        <p className="text-xs text-slate-500">{formatCurrency(d.precio_unitario)} c/u</p>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className="font-bold text-slate-900">{formatCurrency(d.subtotal)}</span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          value={d.cantidad} 
+                          onChange={(e) => actualizarCantidad(i, parseInt(e.target.value) || 1)}
+                          className="w-16 p-1.5 bg-white border border-slate-200 rounded-lg text-center font-bold text-slate-700 focus:ring-2 focus:ring-orange-500 outline-none"
+                        />
+                        <span className="font-bold text-slate-900 min-w-20 text-right">{formatCurrency(d.subtotal)}</span>
                         <button onClick={() => eliminarDetalle(i)} className="text-rose-500 p-1 hover:bg-rose-50 rounded-lg">
                           <Trash2 size={18} />
                         </button>
@@ -509,7 +652,7 @@ export default function Ventas() {
               <div>
                 <p className="text-sm text-slate-500 font-medium">Total a Pagar</p>
                 <p className="text-2xl font-black text-slate-900">
-                  {formatCurrency(detalles.reduce((acc, d) => acc + d.subtotal, 0))}
+                  {formatCurrency(totalVenta)}
                 </p>
               </div>
               <div className="flex gap-3">

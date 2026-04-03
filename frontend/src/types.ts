@@ -1,7 +1,7 @@
 export interface Usuario {
   usuario_id: number;
   username: string;
-  rol: 'Admin' | 'Vendedor' | 'Cliente';
+  rol: 'Administrador' | 'Vendedor' | 'Cliente';
   token?: string;
 }
 
