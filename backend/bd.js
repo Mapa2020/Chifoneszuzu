@@ -1,4 +1,5 @@
 import { pool } from './db.js';
+import bcrypt from 'bcryptjs';
 
 /**
  * SQL Schema para inicialización
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS \`usuarios\` (
   \`username\` varchar(50) COLLATE utf8mb3_spanish2_ci NOT NULL,
   \`password\` varchar(255) COLLATE utf8mb3_spanish2_ci NOT NULL,
   \`rol\` enum('Administrador','Vendedor','Cliente') COLLATE utf8mb3_spanish2_ci NOT NULL,
+  \`activo\` tinyint(1) DEFAULT '1',
   \`cliente_id\` int DEFAULT NULL,
   PRIMARY KEY (\`usuario_id\`),
   UNIQUE KEY \`username\` (\`username\`)
@@ -124,6 +126,15 @@ CREATE TABLE IF NOT EXISTS \`rentabilidad_historica\` (
   \`margen_externo\` decimal(10,3) DEFAULT NULL,
   \`margen_especial\` decimal(10,3) DEFAULT NULL,
   PRIMARY KEY (\`registro_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_spanish2_ci;
+
+CREATE TABLE IF NOT EXISTS \`historial_contenedores\` (
+  \`historial_id\` int NOT NULL AUTO_INCREMENT,
+  \`contenedor_id\` int DEFAULT NULL,
+  \`cliente_id\` int DEFAULT NULL,
+  \`fecha\` datetime DEFAULT CURRENT_TIMESTAMP,
+  \`tipo\` enum('Entrega','Devolucion') COLLATE utf8mb3_spanish2_ci DEFAULT 'Devolucion',
+  PRIMARY KEY (\`historial_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_spanish2_ci;
 `;
 
@@ -196,18 +207,26 @@ const seedDatabase = async () => {
  */
 export const initializeDatabase = async () => {
   try {
+    const dbName = process.env.DB_NAME || 'bdchifon';
+    console.log(`📡 Probando conexión al host: ${process.env.DB_HOST || 'localhost'}...`);
+
     // 1. Verificar si la base de datos ya tiene tablas
+    console.log(`🔍 Verificando tablas en la base de datos: ${dbName}...`);
+    
     const [rows] = await pool.query("SHOW TABLES");
     
     if (rows.length > 0) {
       console.log("ℹ️ La base de datos ya contiene tablas. Saltando inicialización.");
-      return;
+      return true;
     }
 
     console.log("🚀 Base de datos vacía detectada. Iniciando creación de esquema...");
 
     // 2. Ejecutar el esquema completo
-    await pool.query(schema);
+    const statements = schema.split(';').filter(st => st.trim() !== '');
+    for (const statement of statements) {
+      await pool.query(statement);
+    }
     
     // 3. Cargar datos de prueba
     await seedDatabase();
@@ -217,8 +236,8 @@ export const initializeDatabase = async () => {
     // 3. Crear usuario administrador por defecto si no existe (Opcional pero recomendado)
     const [adminExists] = await pool.query("SELECT * FROM usuarios WHERE username = 'Administrador'");
     if (adminExists.length === 0) {
-      // Password: 'admin' (Encriptado con bcrypt rounds=10)
-      const defaultAdminPass = '$2a$10$9v3J6W5qWl.YhN8F.hF6.eXyH6pQ6O6pQ6O6pQ6O6pQ6O6pQ6O6pQ'; 
+      // Generamos el hash dinámicamente para asegurar compatibilidad
+      const defaultAdminPass = await bcrypt.hash('Cristo*777', 10); 
       await pool.query(
         "INSERT INTO usuarios (username, password, rol) VALUES (?, ?, ?)",
         ['Administrador', defaultAdminPass, 'Administrador']
@@ -227,7 +246,7 @@ export const initializeDatabase = async () => {
     }
 
   } catch (error) {
-    console.error("❌ Error durante la inicialización de la base de datos:", error.message);
+    console.error("❌ Error durante la inicialización de la base de datos:", error);
     throw error;
   }
 };

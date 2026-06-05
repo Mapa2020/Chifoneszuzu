@@ -9,6 +9,8 @@ import {
   MoreVertical,
   RotateCcw
 } from 'lucide-react';
+import { useAuth } from '../AuthContext';
+import { toast } from 'sonner';
 import { 
   flexRender, 
   getCoreRowModel, 
@@ -28,11 +30,15 @@ interface Contenedor {
 const columnHelper = createColumnHelper<Contenedor>();
 
 export default function Contenedores() {
+  const { user } = useAuth();
+  const isAdmin = user?.rol === 'Administrador';
   const [items, setItems] = useState<Contenedor[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/contenedores')
+    fetch('/api/contenedores', {
+      headers: { 'Authorization': `Bearer ${user?.token}` }
+    })
       .then(res => res.json())
       .then(data => {
         setItems(data);
@@ -41,8 +47,18 @@ export default function Contenedores() {
   }, []);
 
   const handleDevolver = async (id: number) => {
-    await fetch(`/api/contenedores/devolver/${id}`, { method: 'POST' });
-    setItems(items.map(item => item.contenedor_id === id ? { ...item, estado: 'Devuelto' } : item));
+    try {
+      const res = await fetch(`/api/contenedores/devolver/${id}`, { 
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      });
+      if (res.ok) {
+        toast.success("Envase devuelto");
+        setItems(items.map(item => item.contenedor_id === id ? { ...item, estado: 'Devuelto' } : item));
+      }
+    } catch (error) {
+      toast.error("Error al registrar devolución");
+    }
   };
 
   const columns = [
@@ -99,9 +115,10 @@ export default function Contenedores() {
     }),
     columnHelper.display({
       id: 'actions',
+      header: isAdmin ? 'Acciones' : '',
       cell: info => (
         <div className="flex items-center gap-2">
-          {info.row.original.estado === 'EnUso' && (
+          {isAdmin && info.row.original.estado === 'EnUso' && (
             <button 
               onClick={() => handleDevolver(info.row.original.contenedor_id)}
               className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg text-slate-400 transition-colors" 
@@ -131,10 +148,12 @@ export default function Contenedores() {
           <h2 className="text-2xl font-bold text-slate-800">Control de Envases</h2>
           <p className="text-slate-500">Seguimiento de contenedores plásticos y ciclos de reutilización.</p>
         </div>
-        <button className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200">
-          <Plus size={20} />
-          Registrar Envases
-        </button>
+        {isAdmin && (
+          <button className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200">
+            <Plus size={20} />
+            Registrar Envases
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

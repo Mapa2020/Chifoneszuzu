@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken, authorizeRole } from './auth.js';
-import { runBackup } from '../backup.js';
+import { runBackup } from './backup.js';
 
 const router = express.Router();
 

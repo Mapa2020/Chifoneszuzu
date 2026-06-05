@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Crear nuevo cliente
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   try {
     const { nombre, categoria, telefono, direccion } = req.body;
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -31,7 +31,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Actualizar cliente
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, categoria, telefono, direccion } = req.body;

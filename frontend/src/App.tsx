@@ -107,8 +107,8 @@ function AppContent() {
                 {isAdmin && <SidebarItem to="/reportes" icon={FileText} label="Reporte Mensual" active={location.pathname === '/reportes'} isOpen={isSidebarOpen} />}
                 {isAdmin && <SidebarItem to="/usuarios" icon={ShieldCheck} label="Usuarios" active={location.pathname === '/usuarios'} isOpen={isSidebarOpen} />}
                 {isAdmin && <SidebarItem to="/proveedores" icon={Truck} label="Proveedores" active={location.pathname === '/proveedores'} isOpen={isSidebarOpen} />}
-                <SidebarItem to="/clientes" icon={Users} label="Clientes" active={location.pathname === '/clientes'} isOpen={isSidebarOpen} />
-                <SidebarItem to="/egresos" icon={Receipt} label="Egresos" active={location.pathname === '/egresos'} isOpen={isSidebarOpen} />
+                {isAdmin && <SidebarItem to="/clientes" icon={Users} label="Clientes" active={location.pathname === '/clientes'} isOpen={isSidebarOpen} />}
+                {isAdmin && <SidebarItem to="/egresos" icon={Receipt} label="Egresos" active={location.pathname === '/egresos'} isOpen={isSidebarOpen} />}
                 <SidebarItem to="/contenedores" icon={Box} label="Contenedores" active={location.pathname === '/contenedores'} isOpen={isSidebarOpen} />
               </>
             )}
@@ -179,8 +179,6 @@ function AppContent() {
               <React.Fragment>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ventas" element={<Ventas />} />
-                <Route path="/clientes" element={<Clientes />} />
-                <Route path="/egresos" element={<Egresos />} />
                 <Route path="/contenedores" element={<Contenedores />} />
                 {isAdmin && (
                   <React.Fragment>
@@ -189,6 +187,8 @@ function AppContent() {
                     <Route path="/reportes" element={<ReporteMensual />} />
                     <Route path="/usuarios" element={<Usuarios />} />
                     <Route path="/proveedores" element={<Proveedores />} />
+                    <Route path="/clientes" element={<Clientes />} />
+                    <Route path="/egresos" element={<Egresos />} />
                   </React.Fragment>
                 )}
                 {/* Ruta de respaldo para Admin/Vendedor */}

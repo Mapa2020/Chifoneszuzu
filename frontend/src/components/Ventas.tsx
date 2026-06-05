@@ -69,6 +69,9 @@ export default function Ventas() {
   const [formaPago, setFormaPago] = useState<string>('Contado');
   const [fechaVenta, setFechaVenta] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  const isAdmin = user?.rol?.toLowerCase() === 'admin' || 
+                  user?.rol?.toLowerCase() === 'administrador';
+
   const selectedCliente = useMemo(() => 
     clientes.find(c => c.cliente_id === parseInt(clienteId)), 
   [clientes, clienteId]);
@@ -389,7 +392,7 @@ export default function Ventas() {
           <button onClick={() => handlePrintVenta(info.row.original)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400" title="Re-imprimir">
             <Printer size={16} />
           </button>
-          {user?.rol === 'Administrador' && (
+          {isAdmin && (
             <>
               <button onClick={() => handleEditVenta(info.row.original)} className="p-1.5 hover:bg-orange-50 text-slate-400 hover:text-orange-500 rounded-lg">
                 <Pencil size={16} />
@@ -417,13 +420,15 @@ export default function Ventas() {
           <h2 className="text-2xl font-bold text-slate-800">Ventas</h2>
           <p className="text-slate-500">Gestiona y visualiza todas las ventas realizadas.</p>
         </div>
-        <button 
-          onClick={() => { setEditingId(null); setDetalles([]); setFechaVenta(new Date().toISOString().split('T')[0]); setShowModal(true); }}
-          className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200"
-        >
-          <Plus size={20} />
-          Nueva Venta
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={() => { setEditingId(null); setDetalles([]); setFechaVenta(new Date().toISOString().split('T')[0]); setShowModal(true); }}
+            className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200"
+          >
+            <Plus size={20} />
+            Nueva Venta
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

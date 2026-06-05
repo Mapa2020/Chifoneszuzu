@@ -8,8 +8,23 @@ const router = express.Router();
 router.get('/dashboard/stats', authenticateToken, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
+    const userId = req.user.id;
+    const isAdmin = req.user.rol === 'Administrador';
+
+    let salesQuery = 'SELECT SUM(total) as total FROM ventas WHERE fecha = ?';
+    let salesParams = [today];
+
+    if (!isAdmin) {
+      if (req.user.rol === 'Vendedor') {
+        salesQuery += ' AND usuario_id = ?';
+        salesParams.push(userId);
+      } else if (req.user.rol === 'Cliente') {
+        salesQuery += ' AND cliente_id = (SELECT cliente_id FROM usuarios WHERE usuario_id = ?)';
+        salesParams.push(userId);
+      }
+    }
     
-    const [sales] = await pool.query('SELECT SUM(total) as total FROM ventas WHERE fecha = ?', [today]);
+    const [sales] = await pool.query(salesQuery, salesParams);
     const [expenses] = await pool.query('SELECT SUM(monto) as total FROM egresos WHERE fecha = ?', [today]);
     const [lowStock] = await pool.query('SELECT COUNT(*) as count FROM ingredientes WHERE stock_actual <= stock_minimo');
     const [lowStockItems] = await pool.query('SELECT nombre, stock_actual, unidad_medida FROM ingredientes WHERE stock_actual <= stock_minimo LIMIT 5');

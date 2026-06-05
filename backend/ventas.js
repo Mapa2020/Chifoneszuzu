@@ -7,13 +7,27 @@ const router = express.Router();
 // Listar ventas
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const [rows] = await pool.query(`
+    let query = `
       SELECT v.*, c.nombre as cliente_nombre, u.username as vendedor_nombre
       FROM ventas v 
       LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
       LEFT JOIN usuarios u ON v.usuario_id = u.usuario_id
-      ORDER BY v.fecha DESC
-    `);
+    `;
+    let params = [];
+
+    if (req.user.rol !== 'Administrador') {
+      if (req.user.rol === 'Vendedor') {
+        query += " WHERE v.usuario_id = ? ";
+        params.push(req.user.id);
+      } else if (req.user.rol === 'Cliente') {
+        query += " WHERE v.cliente_id = (SELECT cliente_id FROM usuarios WHERE usuario_id = ?) ";
+        params.push(req.user.id);
+      }
+    }
+
+    query += " ORDER BY v.fecha DESC";
+
+    const [rows] = await pool.query(query, params);
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -8,7 +8,8 @@ const __dirname = path.dirname(__filename);
 
 export const runBackup = () => {
   return new Promise((resolve, reject) => {
-    const rootDir = path.resolve(__dirname);
+    // Al estar en /app dentro del contenedor, rootDir respaldará el código del backend
+    const rootDir = path.resolve(__dirname); 
     const backupDir = path.join(rootDir, 'backups');
 
     if (!fs.existsSync(backupDir)) {
@@ -17,7 +18,7 @@ export const runBackup = () => {
 
     const date = new Date();
     const timestamp = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}-${date.getMinutes().toString().padStart(2, '0')}`;
-    const fileName = `chifoneszuzu_${timestamp}.zip`;
+    const fileName = `chifoneszuzu_backend_${timestamp}.zip`;
     const outputPath = path.join(backupDir, fileName);
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -39,8 +40,6 @@ export const runBackup = () => {
       ignore: [
         'node_modules/**',
         '**/node_modules/**',
-        'frontend/dist/**',
-        'frontend/build/**',
         'backups/**',
         '.git/**',
         '.env*',

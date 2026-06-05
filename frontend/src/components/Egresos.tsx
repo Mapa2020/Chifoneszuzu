@@ -29,6 +29,12 @@ export default function Egresos() {
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState('Todos los tipos');
+
+  // Filtros de fecha inicializados al mes actual
+  const now = new Date();
+  const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]);
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split('T')[0],
@@ -140,9 +146,14 @@ export default function Egresos() {
       const matchesSearch = item.concepto.toLowerCase().includes(searchLower) || 
                            item.tipo.toLowerCase().includes(searchLower);
       const matchesTipo = filterTipo === 'Todos los tipos' || item.tipo === filterTipo;
-      return matchesSearch && matchesTipo;
+      
+      // Filtro por rango de fechas
+      const itemDate = item.fecha.split('T')[0];
+      const matchesDate = (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
+
+      return matchesSearch && matchesTipo && matchesDate;
     });
-  }, [items, searchTerm, filterTipo]);
+  }, [items, searchTerm, filterTipo, startDate, endDate]);
 
   const columns = [
     columnHelper.accessor('fecha', {
@@ -216,17 +227,39 @@ export default function Egresos() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar egreso..." 
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-orange-500 transition-all outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+        <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-4 justify-between">
+          <div className="flex flex-col md:flex-row gap-3 flex-1">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Buscar egreso..." 
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-orange-500 transition-all outline-none"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+              <Calendar size={16} className="text-slate-400" />
+              <div className="flex items-center gap-1">
+                <input 
+                  type="date" 
+                  className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-600 outline-none cursor-pointer"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <span className="text-slate-300 font-bold px-1 text-[10px]">AL</span>
+                <input 
+                  type="date" 
+                  className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-600 outline-none cursor-pointer"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
+
           <div className="flex gap-2">
             <select 
               className="bg-slate-50 border-none rounded-xl text-sm px-4 py-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-600"

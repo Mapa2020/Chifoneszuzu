@@ -5,7 +5,7 @@ import { authenticateToken, authorizeRole } from './auth.js';
 const router = express.Router();
 
 // Listar todos los egresos
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM egresos ORDER BY fecha DESC');
     res.json(rows);
@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Registrar un nuevo egreso
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   const { fecha, tipo, concepto, monto, proveedor_id } = req.body;
   try {
     const [result] = await pool.query(
@@ -29,7 +29,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Actualizar un egreso existente
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   const { id } = req.params;
   const { fecha, tipo, concepto, monto, proveedor_id } = req.body;
   try {

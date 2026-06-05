@@ -1,3 +1,4 @@
+console.log("🎬 Iniciando proceso del servidor backend...");
 import { initializeDatabase } from './bd.js';
 import express from 'express';
 import cors from 'cors';
@@ -17,21 +18,29 @@ import recetasRouter from './recetas.js';
 import adminRouter from './adminRouter.js';
 
 const app = express();
-const PORT = 3003;
+const PORT = process.env.BACKEND_PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
 // --- INICIALIZACIÓN Y ARRANQUE ---
-const startServer = async () => {
-  try {
-    await initializeDatabase();
-    app.listen(PORT, () => {
-      console.log(`🚀 Backend de Chiffon Master corriendo en http://localhost:${PORT}`);
-    });
-  } catch (err) {
-    console.error("❌ Error crítico al iniciar el servidor:", err);
-    process.exit(1);
+const startServer = async (retries = 5) => {
+  while (retries) {
+    try {
+      await initializeDatabase();
+      app.listen(PORT, () => {
+        console.log(`🚀 Backend de Chiffon Master corriendo en el puerto ${PORT}`);
+      });
+      break; // Éxito, salimos del bucle
+    } catch (err) {
+      console.error(`❌ Error al conectar (reintentos restantes: ${retries - 1}):`, err);
+      retries -= 1;
+      if (retries === 0) {
+        console.error("❌ No se pudo conectar a la DB tras varios intentos. Saliendo...");
+        process.exit(1);
+      }
+      await new Promise(res => setTimeout(res, 5000)); // Esperar 5 segundos
+    }
   }
 };
 

@@ -117,9 +117,13 @@ export default function Dashboard() {
   }, [user]);
 
   const clienteConsultado = useMemo(() => {
+    // Si es un cliente logueado, mostrar su propia tarjeta automáticamente
+    if (!isAdmin && user?.cliente_id) {
+      return clientes.find(c => c.cliente_id === user.cliente_id);
+    }
     if (!searchCliente) return null;
     return clientes.find(c => c.nombre.toLowerCase().includes(searchCliente.toLowerCase()) || c.cliente_id.toString() === searchCliente);
-  }, [clientes, searchCliente]);
+  }, [clientes, searchCliente, user, isAdmin]);
 
   const handleBackup = async () => {
     setBackingUp(true);
@@ -186,33 +190,37 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Ventas del Día" 
+          title={isAdmin ? "Ventas del Día" : "Mis Ventas de Hoy"}
           value={formatCurrency(stats?.salesToday || 0)} 
           icon={TrendingUp} 
           trend="up" 
           trendValue="12%" 
           color="bg-orange-500"
         />
-        <StatCard 
-          title="Gastos del Día" 
-          value={formatCurrency(stats?.expensesToday || 0)} 
-          icon={TrendingDown} 
-          trend="down" 
-          trendValue="5%" 
-          color="bg-slate-800"
-        />
-        <StatCard 
-          title="Insumos Críticos" 
-          value={stats?.lowStockCount || 0} 
-          icon={AlertCircle} 
-          color="bg-red-500"
-        />
-        <StatCard 
-          title="Envases Pendientes" 
-          value={stats?.pendingContainers || 0} 
-          icon={Box} 
-          color="bg-blue-500"
-        />
+        {isAdmin && (
+          <>
+            <StatCard 
+              title="Gastos del Día" 
+              value={formatCurrency(stats?.expensesToday || 0)} 
+              icon={TrendingDown} 
+              trend="down" 
+              trendValue="5%" 
+              color="bg-slate-800"
+            />
+            <StatCard 
+              title="Insumos Críticos" 
+              value={stats?.lowStockCount || 0} 
+              icon={AlertCircle} 
+              color="bg-red-500"
+            />
+            <StatCard 
+              title="Envases Pendientes" 
+              value={stats?.pendingContainers || 0} 
+              icon={Box} 
+              color="bg-blue-500"
+            />
+          </>
+        )}
       </div>
 
       {/* Sección Operativa para el Vendedor */}
@@ -306,134 +314,115 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {isAdmin && (
-          <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Rendimiento Semanal</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorVentas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Area type="monotone" dataKey="ventas" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#colorVentas)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        )}
-
-        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-800">Alertas de Stock</h3>
-            {stats?.lowStockItems && stats.lowStockItems.length > 0 && (
-              <button 
-                onClick={sendWhatsAppReport}
-                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                title="Enviar reporte por WhatsApp"
-              >
-                <MessageCircle size={20} />
-              </button>
-            )}
-          </div>
-          <div className="space-y-4 flex-1">
-            {stats?.lowStockItems && stats.lowStockItems.length > 0 ? (
-              stats.lowStockItems.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-rose-50 rounded-xl border border-rose-100">
-                  <div>
-                    <p className="font-bold text-rose-900 text-sm">{item.nombre}</p>
-                    <p className="text-xs text-rose-600">Quedan solo {Number(item.stock_actual).toFixed(3)} {item.unidad_medida}</p>
-                  </div>
-                  <div className="w-8 h-8 bg-rose-500 text-white rounded-lg flex items-center justify-center">
-                    <AlertCircle size={18} />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <Check size={32} className="text-emerald-500 mb-2" />
-                <p className="text-sm font-medium text-slate-600">¡Todo en orden!</p>
-                <p className="text-xs text-slate-400">No hay insumos críticos.</p>
+      {isAdmin && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
+              <h3 className="text-lg font-bold text-slate-800 mb-6">Rendimiento Semanal</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorVentas" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                    <Area type="monotone" dataKey="ventas" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#colorVentas)" />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-3 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Comparativa Ventas vs Gastos</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <Tooltip 
-                  cursor={{fill: '#f8fafc'}}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="ventas" fill="#f97316" radius={[4, 4, 0, 0]} barSize={20} />
-                <Bar dataKey="egresos" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="lg:col-span-3 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Rentabilidad por Sabor: Costo vs Precio</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={productos}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="nombre" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <Tooltip 
-                  cursor={{fill: '#f8fafc'}}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value) => formatCurrency(value as number)}
-                />
-                <Legend 
-                  verticalAlign="top" 
-                  align="right" 
-                  iconType="circle" 
-                  wrapperStyle={{ paddingBottom: '20px', fontSize: '11px', fontWeight: '600' }} 
-                />
-                <Bar dataKey="costo_produccion" name="Costo de Producción" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25} />
-                <Bar dataKey="precio" name="Precio de Venta" fill="#f97316" radius={[4, 4, 0, 0]} barSize={25} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <ShieldCheck size={20} />
             </div>
-            <h3 className="text-lg font-bold text-slate-800">Administración Global</h3>
+
+            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-slate-800">Alertas de Stock</h3>
+                {stats?.lowStockItems && stats.lowStockItems.length > 0 && (
+                  <button onClick={sendWhatsAppReport} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Enviar reporte por WhatsApp">
+                    <MessageCircle size={20} />
+                  </button>
+                )}
+              </div>
+              <div className="space-y-4 flex-1">
+                {stats?.lowStockItems && stats.lowStockItems.length > 0 ? (
+                  stats.lowStockItems.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-rose-50 rounded-xl border border-rose-100">
+                      <div>
+                        <p className="font-bold text-rose-900 text-sm">{item.nombre}</p>
+                        <p className="text-xs text-rose-600">Quedan {Number(item.stock_actual).toFixed(3)} {item.unidad_medida}</p>
+                      </div>
+                      <div className="w-8 h-8 bg-rose-500 text-white rounded-lg flex items-center justify-center">
+                        <AlertCircle size={18} />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <Check size={32} className="text-emerald-500 mb-2" />
+                    <p className="text-sm font-medium text-slate-600">¡Todo en orden!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
+              <h3 className="text-lg font-bold text-slate-800 mb-6">Comparativa Ventas vs Gastos</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                    <Bar dataKey="ventas" fill="#f97316" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="egresos" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm min-w-0">
+              <h3 className="text-lg font-bold text-slate-800 mb-6">Rentabilidad por Sabor</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={productos}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="nombre" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(value) => formatCurrency(value as number)} />
+                    <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '11px', fontWeight: '600' }} />
+                    <Bar dataKey="costo_produccion" name="Costo" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25} />
+                    <Bar dataKey="precio" name="Precio" fill="#f97316" radius={[4, 4, 0, 0]} barSize={25} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ShieldCheck size={20} /></div>
+                <h3 className="text-lg font-bold text-slate-800">Administración Global</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-6">Ejecuta tareas de mantenimiento del sistema.</p>
+              <button 
+                onClick={handleBackup}
+                disabled={backingUp}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl font-bold transition-all",
+                  backingUp ? "bg-slate-100 text-slate-400" : "bg-slate-800 text-white hover:bg-slate-900 shadow-lg shadow-slate-200"
+                )}
+              >
+                {backingUp ? <div className="animate-spin h-5 w-5 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Database size={18} />}
+                {backingUp ? "Generando Respaldo..." : "Crear Backup"}
+              </button>
+            </div>
           </div>
-          <p className="text-sm text-slate-500 mb-6">Ejecuta tareas de mantenimiento y seguridad del sistema.</p>
-          <button 
-            onClick={handleBackup}
-            disabled={backingUp}
-            className={cn(
-              "w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl font-bold transition-all",
-              backingUp ? "bg-slate-100 text-slate-400" : "bg-slate-800 text-white hover:bg-slate-900 shadow-lg shadow-slate-200"
-            )}
-          >
-            {backingUp ? <div className="animate-spin h-5 w-5 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Database size={18} />}
-            {backingUp ? "Generando Respaldo..." : "Crear Backup del Sistema"}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
