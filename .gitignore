@@ -1,15 +1,26 @@
 # Dependencias
 node_modules/
+jspdf/
 
 # Compilación
 dist/
 build/
+*.local
 
-# Variables de entorno (Seguridad)
+# Variables de entorno (¡MUY IMPORTANTE!)
 .env
+.env.production
+.env.development
 
-# Logs y archivos temporales
-*.log
+# Docker
+zuzu_db_data/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editores
 .vscode/
-.DS_Store
-backups/*.zip
+.idea/
+DS_Store

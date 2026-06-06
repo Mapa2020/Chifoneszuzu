@@ -19,13 +19,11 @@ services:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
     environment:
       - DB_HOST=db
+      - BACKEND_PORT=3001
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - JWT_SECRET=${JWT_SECRET}
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     depends_on:
       - db
 
@@ -34,14 +32,9 @@ services:
     container_name: zuzu_frontend
     restart: always
     ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "${FRONTEND_PORT}:80"
     environment:
-      - VITE_API_URL=http://localhost:3001
-      # Solución para Hot Reload en Windows/Docker Desktop
-      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=/api
     depends_on:
       - backend
 

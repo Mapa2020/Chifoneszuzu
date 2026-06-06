@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# Etapa 1: Construcción (Build)
+FROM node:20-slim AS build
 
 WORKDIR /app
 
@@ -6,8 +7,13 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
+RUN npm run build
 
-EXPOSE 5173
+# Etapa 2: Servidor de producción (Nginx)
+FROM nginx:stable-alpine
 
-# --host es necesario para que Vite acepte conexiones externas al contenedor
-CMD ["npm", "run", "dev", "--", "--host"]
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
