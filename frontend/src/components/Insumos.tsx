@@ -33,7 +33,7 @@ import {
 } from '@tanstack/react-table';
 import { Ingrediente } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 
 const columnHelper = createColumnHelper<Ingrediente>();

@@ -25,7 +25,7 @@ import {
 } from '@tanstack/react-table';
 import { Venta } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 
 interface DetalleVentaTmp {

@@ -19,19 +19,19 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { cn } from './lib/utils';
-import Dashboard from './components/Dashboard';
-import Login from './components/Login';
-import Ventas from './components/Ventas';
-import Insumos from './components/Insumos';
-import Productos from './components/Productos';
-import ReporteMensual from './components/ReporteMensual';
-import Usuarios from './components/Usuarios';
-import Proveedores from './components/Proveedores';
-import Clientes from './components/Clientes';
-import Egresos from './components/Egresos';
-import Contenedores from './components/Contenedores';
-import PedidoCliente from './components/PedidoCliente';
-import { AuthProvider, useAuth } from './AuthContext';
+import Dashboard from './components/dashboard';
+import Login from './components/login';
+import Ventas from './components/ventas';
+import Insumos from './components/insumos';
+import Productos from './components/productos';
+import ReporteMensual from './components/reportemensual';
+import Usuarios from './components/usuarios';
+import Proveedores from './components/proveedores';
+import Clientes from './components/clientes';
+import Egresos from './components/egresos';
+import Contenedores from './components/contenedores';
+import PedidoCliente from './components/pedidocliente';
+import { AuthProvider, useAuth } from './authcontext';
 import { Toaster } from 'sonner';
 
 function SidebarItem({ to, icon: Icon, label, active, isOpen }: { to: string, icon: React.ElementType, label: string, active: boolean, isOpen: boolean }) {

@@ -17,7 +17,7 @@ import {
   useReactTable, 
   createColumnHelper 
 } from '@tanstack/react-table';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 import { Cliente } from '../types';
 import { cn } from '../lib/utils';

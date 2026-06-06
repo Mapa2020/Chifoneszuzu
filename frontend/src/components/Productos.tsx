@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, UtensilsCrossed, Trash2, X, ChefHat, Pencil, Info, Save, AlertTriangle, ChevronRight, ChevronLeft, Beaker } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 
 export default function Productos() {

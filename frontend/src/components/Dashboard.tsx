@@ -29,7 +29,7 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { DashboardStats, MonthlyReportData, Venta, Cliente } from '../types';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 
 interface StatCardProps {
@@ -116,14 +116,16 @@ export default function Dashboard() {
     fetchData();
   }, [user]);
 
+  const userClienteId = (user as any)?.cliente_id;
+
   const clienteConsultado = useMemo(() => {
     // Si es un cliente logueado, mostrar su propia tarjeta automáticamente
-    if (!isAdmin && user?.cliente_id) {
-      return clientes.find(c => c.cliente_id === user.cliente_id);
+    if (!isAdmin && userClienteId) {
+      return clientes.find(c => c.cliente_id === userClienteId);
     }
     if (!searchCliente) return null;
     return clientes.find(c => c.nombre.toLowerCase().includes(searchCliente.toLowerCase()) || c.cliente_id.toString() === searchCliente);
-  }, [clientes, searchCliente, user, isAdmin]);
+  }, [clientes, searchCliente, userClienteId, isAdmin]);
 
   const handleBackup = async () => {
     setBackingUp(true);

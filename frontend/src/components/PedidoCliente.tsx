@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Package, CheckCircle, QrCode, Banknote, Trash2, Loader2 } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { formatCurrency, cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -43,8 +43,10 @@ export default function PedidoCliente() {
     if (carrito.length === 0) return;
     setProcesando(true);
     
+    const clienteId = user ? (user as any).cliente_id ?? null : null;
+
     const payload = {
-      cliente_id: user?.cliente_id || null, // Se asocia al cliente_id del usuario
+      cliente_id: clienteId,
       total,
       forma_pago: formaPago,
       detalles: carrito.map(item => ({

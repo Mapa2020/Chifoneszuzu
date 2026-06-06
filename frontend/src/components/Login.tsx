@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { Lock, User, Loader2 } from 'lucide-react';
 
 export default function Login() {

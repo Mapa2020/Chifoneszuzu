@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Package, RotateCcw, Award, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 
 interface CartillaProps {
   clienteId: number;

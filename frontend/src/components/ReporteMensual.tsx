@@ -28,7 +28,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { MonthlyReportData, Venta, Cliente } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { toast } from 'sonner';

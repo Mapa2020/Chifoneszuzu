@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, User, Shield, X, Trash2, Pencil, Key, Ban, UserCheck, Search } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { 
@@ -22,7 +22,8 @@ export default function Usuarios() {
   
   const [formData, setFormData] = useState({ username: '', password: '', rol: 'Vendedor', activo: 1 });
 
-  const isAdmin = currentUser?.rol === 'Administrador';
+  const isAdmin = currentUser?.rol?.toLowerCase() === 'admin' || 
+                  currentUser?.rol?.toLowerCase() === 'administrador';
 
   const fetchUsuarios = async () => {
     setLoading(true);

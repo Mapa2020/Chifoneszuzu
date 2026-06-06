@@ -29,9 +29,9 @@ router.post('/login', async (req, res) => {
     if (validPassword) {
       // Usamos 'id' para coincidir con la expectativa de los otros routers (req.user.id)
       const token = jwt.sign(
-        { id: user.usuario_id, username: user.username, rol: user.rol }, 
+        { id: user.usuario_id, username: user.username, rol: user.rol, cliente_id: user.cliente_id }, 
         JWT_SECRET, { expiresIn: '8h' });
-      res.json({ usuario_id: user.usuario_id, username: user.username, rol: user.rol, token });
+      res.json({ usuario_id: user.usuario_id, username: user.username, rol: user.rol, token, cliente_id: user.cliente_id });
     } else {
       res.status(401).json({ error: "Credenciales incorrectas" });
     }

@@ -10,7 +10,7 @@ import {
   Pencil,
   Trash2
 } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 import { 
   flexRender, 
