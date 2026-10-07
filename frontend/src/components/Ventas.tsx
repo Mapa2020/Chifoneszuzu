@@ -15,7 +15,10 @@ import {
   Printer,
   Check,
   User,
-  Pencil
+  Pencil,
+  Truck,
+  Tag,
+  Receipt
 } from 'lucide-react';
 import { 
   flexRender, 
@@ -24,9 +27,10 @@ import {
   createColumnHelper 
 } from '@tanstack/react-table';
 import { Venta } from '../types';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, getLocalDateString, formatDate } from '../lib/utils';
 import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
+import DespachoModal from './DespachoModal';
 
 interface DetalleVentaTmp {
   producto_id: number;
@@ -44,15 +48,22 @@ export default function Ventas() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
+  const [showDespachoModal, setShowDespachoModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  
+  const [filterEstadoPago, setFilterEstadoPago] = useState<'Todos' | 'Pagado' | 'Pendiente'>('Todos');
   
   interface LastSaleInfo {
     ventaId: number;
     cliente: string;
     fecha: string;
     detalles: DetalleVentaTmp[];
+    subtotal: number;
+    descuento: number;
+    envio: number;
+    impuesto: number;
     total: number;
     formaPago: string;
   }
@@ -67,10 +78,16 @@ export default function Ventas() {
   const [clienteId, setClienteId] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formaPago, setFormaPago] = useState<string>('Contado');
-  const [fechaVenta, setFechaVenta] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [fechaVenta, setFechaVenta] = useState<string>(getLocalDateString());
+  const [descuento, setDescuento] = useState<string>('');
+  const [envio, setEnvio] = useState<string>('');
+  const [impuesto, setImpuesto] = useState<string>('');
 
   const isAdmin = user?.rol?.toLowerCase() === 'admin' || 
                   user?.rol?.toLowerCase() === 'administrador';
+  const isCliente = user?.rol?.toLowerCase() === 'cliente';
+  const isVendedor = user?.rol?.toLowerCase() === 'vendedor';
+  const canCreateSale = !isCliente;
 
   const selectedCliente = useMemo(() => 
     clientes.find(c => c.cliente_id === parseInt(clienteId)), 
@@ -109,7 +126,7 @@ export default function Ventas() {
       .then(setRecetas);
   }, []);
 
-  // Lógica de filtrado combinada: Búsqueda y Rango de Fechas
+  // Lógica de filtrado combinada: Búsqueda, Rango de Fechas y Estado de Pago
   const filteredVentas = useMemo(() => {
     return ventas.filter(v => {
       // Filtro por término de búsqueda (Cliente, ID o Forma de Pago)
@@ -121,13 +138,17 @@ export default function Ventas() {
       if (!searchMatch) return false;
 
       // Filtro por rango de fechas (v.fecha está en formato YYYY-MM-DD)
-      const vDate = v.fecha;
+      const vDate = v.fecha ? v.fecha.split('T')[0] : '';
       if (startDate && vDate < startDate) return false;
       if (endDate && vDate > endDate) return false;
 
+      // Filtro por estado de pago
+      const vEstado = v.estado_pago || (v.forma_pago === 'CreditoDia' ? 'Pendiente' : 'Pagado');
+      if (filterEstadoPago !== 'Todos' && vEstado !== filterEstadoPago) return false;
+
       return true;
     });
-  }, [ventas, searchTerm, startDate, endDate]);
+  }, [ventas, searchTerm, startDate, endDate, filterEstadoPago]);
 
   // Lógica de validación de stock en tiempo real
   const missingStock = useMemo(() => {
@@ -158,9 +179,18 @@ export default function Ventas() {
                   missingStock.length === 0 && 
                   (formaPago !== 'CreditoDia' || !!clienteId);
 
-  const totalVenta = useMemo(() => 
+  const subtotalVenta = useMemo(() => 
     detalles.reduce((acc, d) => acc + Number(d.subtotal), 0), 
   [detalles]);
+
+  const numDescuento = Math.max(0, parseFloat(descuento) || 0);
+  const numEnvio = Math.max(0, parseFloat(envio) || 0);
+  const numImpuesto = Math.max(0, parseFloat(impuesto) || 0);
+
+  const totalFinal = useMemo(() => {
+    const calc = subtotalVenta - numDescuento + numEnvio + numImpuesto;
+    return Math.max(0, calc);
+  }, [subtotalVenta, numDescuento, numEnvio, numImpuesto]);
 
   const agregarProducto = (id: string) => {
     const prod = productos.find(p => p.producto_id === parseInt(id));
@@ -216,6 +246,9 @@ export default function Ventas() {
       setClienteId(fullVenta.cliente_id?.toString() || '');
       setFormaPago(fullVenta.forma_pago);
       setFechaVenta(fullVenta.fecha.split('T')[0]);
+      setDescuento(fullVenta.descuento && Number(fullVenta.descuento) > 0 ? String(fullVenta.descuento) : '');
+      setEnvio(fullVenta.envio && Number(fullVenta.envio) > 0 ? String(fullVenta.envio) : '');
+      setImpuesto(fullVenta.impuesto && Number(fullVenta.impuesto) > 0 ? String(fullVenta.impuesto) : '');
       setDetalles(fullVenta.detalles.map((d: any) => ({
         producto_id: d.producto_id,
         nombre: d.producto_nombre,
@@ -251,6 +284,27 @@ export default function Ventas() {
     }
   };
 
+  const handleMarcarPagado = async (id: number) => {
+    try {
+      const res = await fetch(`/api/ventas/${id}/estado-pago`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user?.token}`
+        },
+        body: JSON.stringify({ estado_pago: 'Pagado' })
+      });
+      if (res.ok) {
+        toast.success("Venta marcada como pagada con éxito");
+        fetchVentas();
+      } else {
+        toast.error("Error al actualizar el estado de pago");
+      }
+    } catch {
+      toast.error("Error de conexión al actualizar pago");
+    }
+  };
+
   const handlePrintVenta = async (venta: Venta) => {
     try {
       const res = await fetch(`/api/ventas/${venta.venta_id}`, {
@@ -261,14 +315,19 @@ export default function Ventas() {
       setLastSale({
         ventaId: fullVenta.venta_id,
         cliente: fullVenta.cliente_nombre || 'Venta Directa',
-        fecha: new Date(fullVenta.fecha).toLocaleDateString(),
+        fecha: formatDate(fullVenta.fecha),
         detalles: fullVenta.detalles.map((d: any) => ({
           producto_id: d.producto_id,
           nombre: d.producto_nombre,
           cantidad: d.cantidad,
+          precio_unitario: d.precio_unitario,
           subtotal: d.subtotal
         })),
-        total: fullVenta.total,
+        subtotal: Number(fullVenta.subtotal ?? fullVenta.total ?? 0),
+        descuento: Number(fullVenta.descuento || 0),
+        envio: Number(fullVenta.envio || 0),
+        impuesto: Number(fullVenta.impuesto || 0),
+        total: Number(fullVenta.total),
         formaPago: fullVenta.forma_pago
       });
       setShowTicketModal(true);
@@ -285,7 +344,11 @@ export default function Ventas() {
     
     const payload = {
       cliente_id: clienteId || null,
-      total: totalVenta,
+      subtotal: subtotalVenta,
+      descuento: numDescuento,
+      envio: numEnvio,
+      impuesto: numImpuesto,
+      total: totalFinal,
       forma_pago: formaPago,
       fecha: fechaVenta,
       detalles
@@ -295,7 +358,7 @@ export default function Ventas() {
       const res = await fetch(editingId ? `/api/ventas/${editingId}` : '/api/ventas', {
         method: editingId ? 'PUT' : 'POST',
         headers: { 
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json', 
           'Authorization': `Bearer ${user?.token}`
         },
         body: JSON.stringify(payload)
@@ -310,16 +373,23 @@ export default function Ventas() {
 
       if (data.success) {
         setLastSale({
-          ventaId: data.ventaId,
+          ventaId: data.ventaId || editingId,
           cliente: clientes.find(c => c.cliente_id === parseInt(clienteId))?.nombre || 'Venta Directa',
           fecha: new Date().toLocaleString(),
           detalles: [...detalles],
-          total: totalVenta,
+          subtotal: subtotalVenta,
+          descuento: numDescuento,
+          envio: numEnvio,
+          impuesto: numImpuesto,
+          total: totalFinal,
           formaPago
         });
         setShowModal(false);
         setShowTicketModal(true);
         setDetalles([]);
+        setDescuento('');
+        setEnvio('');
+        setImpuesto('');
         fetchVentas();
 
         toast.success("Venta completada");
@@ -346,7 +416,7 @@ export default function Ventas() {
       cell: info => (
         <div className="flex items-center gap-2">
           <Calendar size={14} className="text-slate-400" />
-          <span className="font-medium">{info.getValue()}</span>
+          <span className="font-medium">{formatDate(info.getValue())}</span>
         </div>
       ),
     }),
@@ -383,7 +453,63 @@ export default function Ventas() {
     }),
     columnHelper.accessor('total', {
       header: 'Total',
-      cell: info => <span className="font-bold text-slate-900">{formatCurrency(info.getValue())}</span>,
+      cell: info => {
+        const v = info.row.original;
+        const numDesc = Number(v.descuento || 0);
+        const numEnv = Number(v.envio || 0);
+        const numImp = Number(v.impuesto || 0);
+        const hasAjustes = numDesc > 0 || numEnv > 0 || numImp > 0;
+        return (
+          <div>
+            <span className="font-bold text-slate-900">{formatCurrency(info.getValue())}</span>
+            {hasAjustes && (
+              <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[10px] font-semibold">
+                {numDesc > 0 && (
+                  <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100" title={`Descuento: -${formatCurrency(numDesc)}`}>
+                    -{numDesc} Bs
+                  </span>
+                )}
+                {numEnv > 0 && (
+                  <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" title={`Envío: +${formatCurrency(numEnv)}`}>
+                    +{numEnv} Env
+                  </span>
+                )}
+                {numImp > 0 && (
+                  <span className="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100" title={`Impuesto: +${formatCurrency(numImp)}`}>
+                    +{numImp} Imp
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
+    }),
+    columnHelper.accessor('estado_pago', {
+      header: 'Estado Cobro',
+      cell: info => {
+        const estado = info.getValue() || (info.row.original.forma_pago === 'CreditoDia' ? 'Pendiente' : 'Pagado');
+        const isPendiente = estado === 'Pendiente';
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold",
+              isPendiente ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+            )}>
+              {isPendiente ? 'Pendiente' : 'Pagado'}
+            </span>
+            {isPendiente && (
+              <button
+                onClick={() => handleMarcarPagado(info.row.original.venta_id)}
+                className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all"
+                title="Marcar como cobrado"
+              >
+                Cobrado
+              </button>
+            )}
+          </div>
+        );
+      },
     }),
     columnHelper.display({ 
       id: 'actions',
@@ -418,17 +544,41 @@ export default function Ventas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Ventas</h2>
-          <p className="text-slate-500">Gestiona y visualiza todas las ventas realizadas.</p>
+          <p className="text-slate-500">
+            {isAdmin 
+              ? 'Gestiona y visualiza todas las ventas realizadas.' 
+              : 'Gestiona y visualiza tus ventas realizadas.'}
+          </p>
         </div>
-        {isAdmin && (
+        <div className="flex items-center gap-3">
           <button 
-            onClick={() => { setEditingId(null); setDetalles([]); setFechaVenta(new Date().toISOString().split('T')[0]); setShowModal(true); }}
-            className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200"
+            onClick={() => setShowDespachoModal(true)}
+            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-emerald-200 cursor-pointer"
+            title="Generar resumen de despacho para WhatsApp"
           >
-            <Plus size={20} />
-            Nueva Venta
+            <Truck size={20} />
+            Despacho WhatsApp
           </button>
-        )}
+          {canCreateSale && (
+            <button 
+              onClick={() => { 
+                setEditingId(null); 
+                setDetalles([]); 
+                setClienteId('');
+                setFormaPago('Contado');
+                setDescuento(''); 
+                setEnvio(''); 
+                setImpuesto(''); 
+                setFechaVenta(getLocalDateString()); 
+                setShowModal(true); 
+              }}
+              className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-200 cursor-pointer"
+            >
+              <Plus size={20} />
+              Nueva Venta
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -472,12 +622,18 @@ export default function Ventas() {
                 </button>
               )}
             </div>
+
+            <select 
+              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold px-3 py-2 text-slate-700 outline-none cursor-pointer"
+              value={filterEstadoPago}
+              onChange={e => setFilterEstadoPago(e.target.value as any)}
+            >
+              <option value="Todos">Todos los cobros</option>
+              <option value="Pagado">Solo Pagados</option>
+              <option value="Pendiente">⚠️ Solo Pendientes</option>
+            </select>
           </div>
           <div className="flex gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-              <Filter size={16} />
-              Filtros
-            </button>
             <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
               <Download size={16} />
               Exportar
@@ -598,7 +754,7 @@ export default function Ventas() {
                   <option value="">Seleccionar producto...</option>
                   {productos.map(p => (
                     <option key={p.producto_id} value={p.producto_id}>
-                      {p.nombre} (S/ {selectedCliente?.categoria === 'Externo' ? p.precio_externo : selectedCliente?.categoria === 'Especial' ? p.precio_especial : p.precio_snack})
+                      {p.nombre} (Bs. {selectedCliente?.categoria === 'Externo' ? p.precio_externo : selectedCliente?.categoria === 'Especial' ? p.precio_especial : p.precio_snack})
                     </option>
                   ))}
                 </select>
@@ -651,13 +807,162 @@ export default function Ventas() {
                   )}
                 </div>
               </div>
+
+              {/* Cargos y Ajustes Finales (Descuentos, Envío, Impuesto en Bs.) */}
+              <div className="p-4 bg-gradient-to-br from-slate-50 via-orange-50/10 to-amber-50/20 border border-slate-200/90 rounded-2xl space-y-3.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg">
+                      <Receipt size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">Cargos y Ajustes Finales</h4>
+                      <p className="text-[11px] text-slate-500">Opcional · Todo en Bolivianos (Bs.) aplicado después del subtotal</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
+                    Opcional
+                  </span>
+                </div>
+
+                {/* Subtotal previo de productos */}
+                <div className="flex items-center justify-between px-3.5 py-2 bg-white rounded-xl border border-slate-200 text-xs">
+                  <span className="font-bold text-slate-600">Subtotal Productos:</span>
+                  <span className="font-extrabold text-slate-800 text-sm">{formatCurrency(subtotalVenta)}</span>
+                </div>
+
+                {/* Grid de los 3 items: Descuento, Envío, Impuesto */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Descuentos */}
+                  <div className="space-y-1.5 p-3 bg-white rounded-xl border border-slate-200 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100 transition-all shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Tag size={13} className="text-emerald-600" />
+                        Descuentos
+                      </label>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                        - Resta
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Bs.</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={descuento}
+                        onChange={(e) => setDescuento(e.target.value)}
+                        className="w-full pl-9 pr-2.5 py-2 bg-slate-50 border-none rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Envío */}
+                  <div className="space-y-1.5 p-3 bg-white rounded-xl border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Truck size={13} className="text-blue-600" />
+                        Envío
+                      </label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                        + Suma
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Bs.</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={envio}
+                        onChange={(e) => setEnvio(e.target.value)}
+                        className="w-full pl-9 pr-2.5 py-2 bg-slate-50 border-none rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Impuesto */}
+                  <div className="space-y-1.5 p-3 bg-white rounded-xl border border-slate-200 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-100 transition-all shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Receipt size={13} className="text-purple-600" />
+                        Impuesto
+                      </label>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                        + Suma
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Bs.</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={impuesto}
+                        onChange={(e) => setImpuesto(e.target.value)}
+                        className="w-full pl-9 pr-2.5 py-2 bg-slate-50 border-none rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen dinámico del desglose si hay al menos un ajuste */}
+                {(numDescuento > 0 || numEnvio > 0 || numImpuesto > 0) && (
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Subtotal productos:</span>
+                      <span className="font-semibold text-slate-700">{formatCurrency(subtotalVenta)}</span>
+                    </div>
+                    {numDescuento > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Tag size={12} /> Descuentos:
+                        </span>
+                        <span>-{formatCurrency(numDescuento)}</span>
+                      </div>
+                    )}
+                    {numEnvio > 0 && (
+                      <div className="flex justify-between text-blue-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Truck size={12} /> Cargo de Envío:
+                        </span>
+                        <span>+{formatCurrency(numEnvio)}</span>
+                      </div>
+                    )}
+                    {numImpuesto > 0 && (
+                      <div className="flex justify-between text-purple-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Receipt size={12} /> Impuesto:
+                        </span>
+                        <span>+{formatCurrency(numImpuesto)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-100 pt-1.5 flex justify-between font-black text-slate-900 text-sm">
+                      <span>Total con Ajustes:</span>
+                      <span className="text-orange-600">{formatCurrency(totalFinal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Total a Pagar</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-slate-500 font-medium">
+                    Subtotal: <span className="font-bold text-slate-700">{formatCurrency(subtotalVenta)}</span>
+                  </p>
+                  {(numDescuento > 0 || numEnvio > 0 || numImpuesto > 0) && (
+                    <span className="text-[10px] bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded-full">
+                      Con ajustes
+                    </span>
+                  )}
+                </div>
                 <p className="text-2xl font-black text-slate-900">
-                  {formatCurrency(totalVenta)}
+                  {formatCurrency(totalFinal)}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -735,9 +1040,33 @@ export default function Ventas() {
                   </table>
                 </div>
 
-                <div className="border-t border-dashed border-slate-300 pt-4 flex justify-between items-center text-sm font-bold">
-                  <span>TOTAL</span>
-                  <span className="text-lg">{formatCurrency(lastSale.total)}</span>
+                <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span>SUBTOTAL</span>
+                    <span>{formatCurrency(Number(lastSale.subtotal ?? lastSale.total))}</span>
+                  </div>
+                  {Number(lastSale.descuento || 0) > 0 && (
+                    <div className="flex justify-between items-center text-xs text-emerald-700">
+                      <span>DESCUENTOS</span>
+                      <span>-{formatCurrency(Number(lastSale.descuento))}</span>
+                    </div>
+                  )}
+                  {Number(lastSale.envio || 0) > 0 && (
+                    <div className="flex justify-between items-center text-xs text-blue-700">
+                      <span>ENVÍO</span>
+                      <span>+{formatCurrency(Number(lastSale.envio))}</span>
+                    </div>
+                  )}
+                  {Number(lastSale.impuesto || 0) > 0 && (
+                    <div className="flex justify-between items-center text-xs text-purple-700">
+                      <span>IMPUESTO</span>
+                      <span>+{formatCurrency(Number(lastSale.impuesto))}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-sm font-bold">
+                    <span>TOTAL</span>
+                    <span className="text-lg">{formatCurrency(lastSale.total)}</span>
+                  </div>
                 </div>
 
                 <div className="text-center pt-6 space-y-1 text-[10px]">
@@ -747,12 +1076,20 @@ export default function Ventas() {
               </div>
             </div>
 
-            <div className="p-6 bg-white flex gap-3">
+            <div className="p-6 bg-white flex gap-2 sm:gap-3">
               <button 
                 onClick={() => setShowTicketModal(false)} 
-                className="flex-1 px-4 py-3 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                className="flex-1 px-3 py-3 text-xs sm:text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
               >
                 Cerrar
+              </button>
+              <button 
+                onClick={() => { setShowTicketModal(false); setShowDespachoModal(true); }}
+                className="flex-1 px-3 py-3 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                title="Ver y enviar despacho del día"
+              >
+                <Truck size={16} />
+                Despacho
               </button>
               <button 
                 onClick={() => {
@@ -766,15 +1103,20 @@ export default function Ventas() {
                     windowPrint.close();
                   }
                 }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl transition-all"
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-3 bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold rounded-xl transition-all"
               >
-                <Printer size={18} />
+                <Printer size={16} />
                 Imprimir
               </button>
             </div>
           </div>
         </div>
       )}
+      {/* Modal de Despacho y Reparto Diario */}
+      <DespachoModal 
+        isOpen={showDespachoModal} 
+        onClose={() => setShowDespachoModal(false)} 
+      />
     </div>
   );
 }

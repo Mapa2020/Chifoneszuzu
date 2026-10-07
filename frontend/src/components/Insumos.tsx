@@ -12,7 +12,9 @@ import {
   X,
   Settings2,
   Download,
-  History
+  History,
+  ShoppingCart,
+  Calendar
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -32,7 +34,7 @@ import {
   createColumnHelper 
 } from '@tanstack/react-table';
 import { Ingrediente } from '../types';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { useAuth } from '../authcontext';
 import { toast } from 'sonner';
 
@@ -55,6 +57,12 @@ export default function Insumos() {
   const [showNewIngModal, setShowNewIngModal] = useState(false);
   const [editingIngId, setEditingIngId] = useState<number | null>(null);
   const [proveedores, setProveedores] = useState<ProveedorMin[]>([]);
+  
+  // Pestañas e historial de compras ligadas
+  const [activeTab, setActiveTab] = useState<'inventario' | 'compras'>('inventario');
+  const [compras, setCompras] = useState<any[]>([]);
+  const [loadingCompras, setLoadingCompras] = useState(false);
+  const [searchCompras, setSearchCompras] = useState('');
   
   // Estado para el formulario
   const [formData, setFormData] = useState({
@@ -80,11 +88,30 @@ export default function Insumos() {
       });
   };
 
+  const fetchCompras = () => {
+    if (!user?.token) return;
+    setLoadingCompras(true);
+    fetch('/api/ingredientes/compras', {
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setCompras(Array.isArray(data) ? data : []);
+        setLoadingCompras(false);
+      })
+      .catch(() => {
+        setLoadingCompras(false);
+      });
+  };
+
   useEffect(() => {
     fetchInsumos();
-    fetch('/api/proveedores', {
-      headers: { 'Authorization': `Bearer ${user?.token}` }
-    }).then(res => res.json()).then(setProveedores);
+    fetchCompras();
+    if (user?.token) {
+      fetch('/api/proveedores', {
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      }).then(res => res.json()).then(data => setProveedores(Array.isArray(data) ? data : []));
+    }
   }, [user]);
 
   const handleOpenEditModal = (ing: Ingrediente) => {
@@ -158,12 +185,18 @@ export default function Insumos() {
         })
       });
       if (res.ok) {
+        toast.success("Compra registrada en almacén y en egresos (70%)");
         setShowModal(false);
         setFormData({ ingrediente_id: '', cantidad: '', costo: '', proveedor_id: '' });
         fetchInsumos();
+        fetchCompras();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al registrar ingreso");
       }
     } catch (error) {
       console.error("Error al registrar ingreso:", error);
+      toast.error("Error de conexión");
     }
   };
 
@@ -317,78 +350,216 @@ export default function Insumos() {
         </div>
       </div>
 
-      {/* Tarjetas de Resumen Rápido */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <p className="text-sm font-medium text-slate-500 mb-1">Total Items</p>
-          <p className="text-2xl font-bold text-slate-800">{items.length}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <p className="text-sm font-medium text-slate-500 mb-1">Stock Crítico</p>
-          <p className="text-2xl font-bold text-red-600">
-            {items.filter(i => i.stock_actual <= i.stock_minimo).length}
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <p className="text-sm font-medium text-slate-500 mb-1">Inversión en Almacén</p>
-          <p className="text-2xl font-bold text-emerald-600">
-            {formatCurrency(items.reduce((acc, i) => acc + (i.stock_actual * i.costo_unitario), 0))}
-          </p>
-        </div>
+      {/* Selector de Pestañas: Inventario vs Historial de Compras */}
+      <div className="flex gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveTab('inventario')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all",
+            activeTab === 'inventario'
+              ? "bg-slate-900 text-white shadow-md shadow-slate-300"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          )}
+        >
+          <Package size={16} />
+          Inventario de Insumos ({items.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('compras')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all",
+            activeTab === 'compras'
+              ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          )}
+        >
+          <ShoppingCart size={16} />
+          Registro de Compras ({compras.length})
+        </button>
       </div>
 
-      {/* Tabla de Insumos */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id} className="bg-slate-50/50">
-                  {headerGroup.headers.map(header => (
-                    <th key={header.id} className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
+      {activeTab === 'inventario' ? (
+        <>
+          {/* Tarjetas de Resumen Rápido - Inventario */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Total Items</p>
+              <p className="text-2xl font-bold text-slate-800">{items.length}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Stock Crítico</p>
+              <p className="text-2xl font-bold text-red-600">
+                {items.filter(i => i.stock_actual <= i.stock_minimo).length}
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Inversión en Almacén</p>
+              <p className="text-2xl font-bold text-emerald-600">
+                {formatCurrency(items.reduce((acc, i) => acc + (i.stock_actual * i.costo_unitario), 0))}
+              </p>
+            </div>
+          </div>
+
+          {/* Tabla de Insumos */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id} className="bg-slate-50/50">
+                      {headerGroup.headers.map(header => (
+                        <th key={header.id} className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </th>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-6 py-12 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-6 py-12 text-center text-slate-500">
-                    No hay insumos registrados.
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map(row => {
-                  const isLow = row.original.stock_actual <= row.original.stock_minimo;
-                  return (
-                  <tr 
-                    key={row.id} 
-                    className={cn(
-                      "border-b border-slate-50 transition-colors",
-                      isLow ? "bg-rose-50/70 hover:bg-rose-100/80" : "hover:bg-slate-50/50"
-                    )}
-                  >
-                    {row.getVisibleCells().map(cell => (
-                      <td key={cell.id} className="px-6 py-4 text-sm">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={columns.length} className="px-6 py-12 text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
                       </td>
-                    ))}
+                    </tr>
+                  ) : items.length === 0 ? (
+                    <tr>
+                      <td colSpan={columns.length} className="px-6 py-12 text-center text-slate-500">
+                        No hay insumos registrados.
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map(row => {
+                      const isLow = row.original.stock_actual <= row.original.stock_minimo;
+                      return (
+                      <tr 
+                        key={row.id} 
+                        className={cn(
+                          "border-b border-slate-50 transition-colors",
+                          isLow ? "bg-rose-50/70 hover:bg-rose-100/80" : "hover:bg-slate-50/50"
+                        )}
+                      >
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id} className="px-6 py-4 text-sm">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Tarjetas de Resumen - Compras */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Compras Registradas</p>
+              <p className="text-2xl font-bold text-slate-800">{compras.length}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Inversión Total en Compras</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {formatCurrency(compras.reduce((acc, c) => acc + Number(c.monto || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 mb-1">Fondo Imputado</p>
+              <p className="text-2xl font-bold text-emerald-600">Proceso (70%)</p>
+            </div>
+          </div>
+
+          {/* Barra de Búsqueda de Compras */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar compra por insumo, proveedor o concepto..." 
+              value={searchCompras} 
+              onChange={e => setSearchCompras(e.target.value)} 
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-500" 
+            />
+          </div>
+
+          {/* Tabla de Historial de Compras */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Insumo Reabastecido</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cant. / Unidad</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">P. Unitario</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total (Bs.)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Proveedor</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Concepto / Detalle</th>
                   </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {loadingCompras ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                      </td>
+                    </tr>
+                  ) : compras.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400 text-sm">
+                        No hay compras de insumos registradas todavía.
+                      </td>
+                    </tr>
+                  ) : (
+                    compras
+                      .filter(c => {
+                        const term = searchCompras.toLowerCase();
+                        const matchConcepto = String(c.concepto || '').toLowerCase().includes(term);
+                        const matchInsumo = String(c.ingrediente_nombre || '').toLowerCase().includes(term);
+                        const matchProv = String(c.proveedor_nombre || '').toLowerCase().includes(term);
+                        return matchConcepto || matchInsumo || matchProv;
+                      })
+                      .map((c, idx) => (
+                        <tr key={c.egreso_id || idx} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                          <td className="px-6 py-4 text-xs font-bold text-slate-700">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar size={13} className="text-slate-400" />
+                              {formatDate(c.fecha)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                              <Package size={14} className="text-orange-500" />
+                              {c.ingrediente_nombre || c.concepto}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-slate-700">
+                            {c.cantidad} {c.ingrediente_unidad || ''}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            {formatCurrency(c.precio_unitario || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-black text-orange-600">
+                            {formatCurrency(c.monto || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-500">
+                            {c.proveedor_nombre || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-600 max-w-xs truncate" title={c.concepto}>
+                            {c.concepto}
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal: Crear Nuevo Insumo Base */}
       {showNewIngModal && (
@@ -507,6 +678,20 @@ export default function Insumos() {
                 </div>
               </div>
 
+              {formData.cantidad && formData.costo && parseFloat(formData.cantidad) > 0 && (
+                <div className="p-3 bg-orange-50 rounded-xl border border-orange-100 text-xs text-orange-900 space-y-1">
+                  <div className="flex justify-between font-medium">
+                    <span>Precio Unitario Calculado:</span>
+                    <strong className="font-bold text-orange-600">
+                      S/. {(parseFloat(formData.costo) / parseFloat(formData.cantidad)).toFixed(2)}
+                    </strong>
+                  </div>
+                  <p className="text-[11px] text-slate-500 italic">
+                    * Se registrará automáticamente en <strong>Egresos del Proceso (Fondo 70%)</strong> y sumará al inventario.
+                  </p>
+                </div>
+              )}
+
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
@@ -541,7 +726,7 @@ export default function Insumos() {
             <div className="p-8">
               <div className="h-64 w-full block relative min-h-64">
                 {historyItems.length > 1 ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
                     <LineChart data={historyItems}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis 

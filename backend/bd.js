@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS \`clientes\` (
   \`categoria\` enum('Snack','Externo','Especial') COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
   \`telefono\` varchar(20) COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
   \`direccion\` varchar(255) COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
+  \`zona\` varchar(100) COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
   \`tarjeta_snack\` int DEFAULT '0',
   PRIMARY KEY (\`cliente_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_spanish2_ci;
@@ -81,10 +82,16 @@ CREATE TABLE IF NOT EXISTS \`usuarios\` (
 CREATE TABLE IF NOT EXISTS \`ventas\` (
   \`venta_id\` int NOT NULL AUTO_INCREMENT,
   \`fecha\` date DEFAULT NULL,
+  \`hora\` time DEFAULT NULL,
   \`cliente_id\` int DEFAULT NULL,
+  \`subtotal\` decimal(10,2) DEFAULT '0.00',
+  \`descuento\` decimal(10,2) DEFAULT '0.00',
+  \`envio\` decimal(10,2) DEFAULT '0.00',
+  \`impuesto\` decimal(10,2) DEFAULT '0.00',
   \`total\` decimal(10,2) DEFAULT NULL,
   \`usuario_id\` int DEFAULT NULL,
   \`forma_pago\` enum('QR','Contado','CreditoDia') COLLATE utf8mb3_spanish2_ci DEFAULT 'QR',
+  \`estado_pago\` enum('Pagado','Pendiente') COLLATE utf8mb3_spanish2_ci DEFAULT 'Pagado',
   PRIMARY KEY (\`venta_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_spanish2_ci;
 
@@ -102,11 +109,17 @@ CREATE TABLE IF NOT EXISTS \`detalle_venta\` (
 CREATE TABLE IF NOT EXISTS \`egresos\` (
   \`egreso_id\` int NOT NULL AUTO_INCREMENT,
   \`fecha\` date DEFAULT NULL,
-  \`tipo\` enum('Insumos','Pasajes','Almuerzo','Sueldo','Otros') COLLATE utf8mb3_spanish2_ci DEFAULT 'Insumos',
+  \`ambito\` enum('Proceso','Personal','Casa') COLLATE utf8mb3_spanish2_ci DEFAULT 'Proceso',
+  \`categoria\` varchar(50) COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
+  \`cantidad\` decimal(10,2) DEFAULT '1.00',
+  \`precio_unitario\` decimal(10,2) DEFAULT NULL,
+  \`tipo\` varchar(50) COLLATE utf8mb3_spanish2_ci DEFAULT 'Otros',
   \`concepto\` varchar(255) COLLATE utf8mb3_spanish2_ci DEFAULT NULL,
   \`monto\` decimal(10,3) DEFAULT NULL,
   \`proveedor_id\` int DEFAULT NULL,
-  PRIMARY KEY (\`egreso_id\`)
+  \`ingrediente_id\` int DEFAULT NULL,
+  PRIMARY KEY (\`egreso_id\`),
+  KEY \`ingrediente_id\` (\`ingrediente_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_spanish2_ci;
 
 CREATE TABLE IF NOT EXISTS \`proveedores\` (
@@ -203,6 +216,159 @@ const seedDatabase = async () => {
 };
 
 /**
+ * Aplica migraciones automáticas sobre tablas existentes si faltan columnas nuevas.
+ */
+export const runMigrations = async () => {
+  try {
+    // 1. Columnas para ventas (estado_pago y hora)
+    const [colsVentas] = await pool.query("SHOW COLUMNS FROM ventas LIKE 'estado_pago'");
+    if (colsVentas.length === 0) {
+      console.log("🔄 Aplicando migración a tabla 'ventas'...");
+      await pool.query("ALTER TABLE ventas ADD COLUMN estado_pago ENUM('Pagado', 'Pendiente') NOT NULL DEFAULT 'Pagado'");
+      await pool.query("ALTER TABLE ventas ADD COLUMN hora TIME DEFAULT NULL");
+      await pool.query("UPDATE ventas SET estado_pago = 'Pendiente' WHERE forma_pago = 'CreditoDia'");
+      console.log("✅ Columnas estado_pago y hora agregadas a tabla ventas.");
+    }
+
+    // 1b. Columnas de montos adicionales para ventas (subtotal, descuento, envio, impuesto)
+    const [colsVentasDescuento] = await pool.query("SHOW COLUMNS FROM ventas LIKE 'descuento'");
+    if (colsVentasDescuento.length === 0) {
+      console.log("🔄 Aplicando migración de cargos finales (subtotal, descuento, envio, impuesto) a tabla 'ventas'...");
+      const addColSafe = async (table, col, def) => {
+        const [c] = await pool.query(`SHOW COLUMNS FROM \`${table}\` LIKE '${col}'`);
+        if (c.length === 0) {
+          await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${def}`);
+        }
+      };
+      await addColSafe('ventas', 'subtotal', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+      await addColSafe('ventas', 'descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+      await addColSafe('ventas', 'envio', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+      await addColSafe('ventas', 'impuesto', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+      await pool.query("UPDATE ventas SET subtotal = COALESCE(total, 0.00) WHERE subtotal = 0.00");
+      console.log("✅ Columnas subtotal, descuento, envio e impuesto agregadas a tabla ventas.");
+    }
+
+    // 2. Columnas para egresos (ambito, categoria, cantidad, precio_unitario)
+    const [colsEgresos] = await pool.query("SHOW COLUMNS FROM egresos LIKE 'ambito'");
+    if (colsEgresos.length === 0) {
+      console.log("🔄 Aplicando migración a tabla 'egresos'...");
+      await pool.query("ALTER TABLE egresos ADD COLUMN ambito ENUM('Proceso', 'Personal', 'Casa') NOT NULL DEFAULT 'Proceso'");
+      await pool.query("ALTER TABLE egresos ADD COLUMN categoria VARCHAR(50) DEFAULT NULL");
+      await pool.query("ALTER TABLE egresos ADD COLUMN cantidad DECIMAL(10,2) DEFAULT 1.00");
+      await pool.query("ALTER TABLE egresos ADD COLUMN precio_unitario DECIMAL(10,2) DEFAULT NULL");
+
+      // Clasificación inicial inteligente para los registros existentes
+      await pool.query("UPDATE egresos SET ambito = 'Proceso', categoria = 'Ingredientes' WHERE tipo = 'Insumos'");
+      await pool.query("UPDATE egresos SET ambito = 'Personal', categoria = 'Sueldo' WHERE tipo = 'Sueldo'");
+      await pool.query("UPDATE egresos SET ambito = 'Casa', categoria = 'Almuerzo' WHERE tipo = 'Almuerzo'");
+      await pool.query("UPDATE egresos SET ambito = 'Proceso', categoria = 'Pasajes' WHERE tipo = 'Pasajes'");
+      await pool.query("UPDATE egresos SET ambito = 'Proceso', categoria = 'Otros' WHERE tipo = 'Otros'");
+      console.log("✅ Columnas ambito, categoria, cantidad, precio_unitario agregadas a tabla egresos.");
+    }
+
+    const [colsTipo] = await pool.query("SHOW COLUMNS FROM egresos LIKE 'tipo'");
+    if (colsTipo.length > 0 && colsTipo[0].Type.toLowerCase().startsWith('enum')) {
+      console.log("🔄 Modificando columna 'tipo' en egresos a VARCHAR(50)...");
+      await pool.query("ALTER TABLE egresos MODIFY COLUMN tipo VARCHAR(50) NULL DEFAULT 'Otros'");
+      console.log("✅ Columna 'tipo' en egresos modificada a VARCHAR(50).");
+    }
+
+    const [colsIngId] = await pool.query("SHOW COLUMNS FROM egresos LIKE 'ingrediente_id'");
+    if (colsIngId.length === 0) {
+      console.log("🔄 Agregando columna 'ingrediente_id' a tabla 'egresos'...");
+      await pool.query("ALTER TABLE egresos ADD COLUMN ingrediente_id INT NULL DEFAULT NULL AFTER proveedor_id, ADD KEY (ingrediente_id)");
+      console.log("✅ Columna 'ingrediente_id' agregada a tabla egresos.");
+    }
+
+    // 3. Columna zona en clientes
+    const [colsZona] = await pool.query("SHOW COLUMNS FROM clientes LIKE 'zona'");
+    if (colsZona.length === 0) {
+      console.log("🔄 Aplicando migración de 'zona' a tabla 'clientes'...");
+      await pool.query("ALTER TABLE clientes ADD COLUMN zona VARCHAR(100) DEFAULT NULL AFTER direccion");
+      await pool.query("UPDATE clientes SET zona = 'RAMADA' WHERE nombre LIKE '%Dayana%' OR nombre LIKE '%Yudith%' OR direccion LIKE '%Ramada%'");
+      await pool.query("UPDATE clientes SET zona = 'U.A.G.R.M' WHERE direccion LIKE '%UAGRM%' OR nombre LIKE '%Derecho%' OR nombre LIKE '%Combito%' OR nombre LIKE '%Amalia%' OR nombre LIKE '%Cristina%'");
+      await pool.query("UPDATE clientes SET zona = 'OTROS' WHERE zona IS NULL");
+      console.log("✅ Columna 'zona' agregada a tabla clientes.");
+    }
+
+    // 4. Tablas de contenedores y cartillas snack
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS control_envases (
+        registro_id INT AUTO_INCREMENT PRIMARY KEY,
+        cliente_id INT NOT NULL,
+        fecha DATE NOT NULL,
+        tipo ENUM('Entrega', 'Devolucion', 'Baja') NOT NULL,
+        cantidad INT NOT NULL DEFAULT 1,
+        venta_id INT NULL,
+        condicion ENUM('Sano', 'Danado', 'Desechado') DEFAULT 'Sano',
+        ciclo_uso INT DEFAULT 1,
+        observaciones VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY (cliente_id),
+        KEY (fecha)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cartillas_cliente (
+        cartilla_id INT AUTO_INCREMENT PRIMARY KEY,
+        cliente_id INT NOT NULL,
+        numero_cartilla VARCHAR(20) NOT NULL,
+        tipo ENUM('Activo', 'Preferente') NOT NULL DEFAULT 'Activo',
+        fecha_inicio DATE NOT NULL,
+        fecha_vencimiento DATE NOT NULL,
+        estado ENUM('EnCurso', 'Completada', 'Canjeada', 'Vencida') NOT NULL DEFAULT 'EnCurso',
+        chifones_acumulados INT DEFAULT 0,
+        envases_devueltos INT DEFAULT 0,
+        fecha_canje DATE NULL,
+        notas VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY (cliente_id),
+        KEY (estado)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cartilla_slots (
+        slot_id INT AUTO_INCREMENT PRIMARY KEY,
+        cartilla_id INT NOT NULL,
+        slot_numero INT NOT NULL,
+        venta_id INT NULL,
+        fecha_venta DATE NULL,
+        producto_nombre VARCHAR(100) NULL,
+        sabor_abrev VARCHAR(10) NULL,
+        fecha_devolucion DATE NULL,
+        envase_devuelto TINYINT(1) DEFAULT 0,
+        observaciones VARCHAR(100) NULL,
+        KEY (cartilla_id),
+        UNIQUE KEY (cartilla_id, slot_numero)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    const [colsTipoCartilla] = await pool.query("SHOW COLUMNS FROM clientes LIKE 'tipo_cartilla'");
+    if (colsTipoCartilla.length === 0) {
+      await pool.query("ALTER TABLE clientes ADD COLUMN tipo_cartilla ENUM('Activo', 'Preferente') DEFAULT 'Activo'");
+    }
+
+    // 5. Columna usuario_id en control_envases para control por vendedor
+    const [colsEnvasesUser] = await pool.query("SHOW COLUMNS FROM control_envases LIKE 'usuario_id'");
+    if (colsEnvasesUser.length === 0) {
+      console.log("🔄 Aplicando migración de 'usuario_id' a tabla 'control_envases'...");
+      await pool.query("ALTER TABLE control_envases ADD COLUMN usuario_id INT NULL AFTER cliente_id");
+      await pool.query(`
+        UPDATE control_envases ce 
+        JOIN ventas v ON ce.venta_id = v.venta_id 
+        SET ce.usuario_id = v.usuario_id 
+        WHERE ce.usuario_id IS NULL AND ce.venta_id IS NOT NULL
+      `);
+      console.log("✅ Columna 'usuario_id' agregada a tabla control_envases.");
+    }
+  } catch (error) {
+    console.error("⚠️ Error durante las migraciones de base de datos:", error.message);
+  }
+};
+
+/**
  * Inicializa la base de datos solo si no existen tablas.
  */
 export const initializeDatabase = async () => {
@@ -216,7 +382,8 @@ export const initializeDatabase = async () => {
     const [rows] = await pool.query("SHOW TABLES");
     
     if (rows.length > 0) {
-      console.log("ℹ️ La base de datos ya contiene tablas. Saltando inicialización.");
+      console.log("ℹ️ La base de datos ya contiene tablas. Verificando migraciones pendientes...");
+      await runMigrations();
       return true;
     }
 

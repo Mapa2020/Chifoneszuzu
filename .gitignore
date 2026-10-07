@@ -24,3 +24,8 @@ yarn-error.log*
 .vscode/
 .idea/
 DS_Store
+
+# Respaldos
+backups/
+backend/backups/
+*.zip

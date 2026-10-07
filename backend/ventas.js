@@ -1,6 +1,8 @@
 import express from 'express';
 import { pool } from './db.js';
 import { authenticateToken } from './auth.js';
+import { getLocalDateString } from './dateUtils.js';
+import { registrarEntregaVenta } from './contenedoresService.js';
 
 const router = express.Router();
 
@@ -15,17 +17,54 @@ router.get('/', authenticateToken, async (req, res) => {
     `;
     let params = [];
 
-    if (req.user.rol !== 'Administrador') {
-      if (req.user.rol === 'Vendedor') {
+    const userRol = String(req.user?.rol || '').toLowerCase();
+    const isAdmin = userRol === 'administrador' || userRol === 'admin';
+
+    if (!isAdmin) {
+      if (userRol === 'vendedor') {
         query += " WHERE v.usuario_id = ? ";
         params.push(req.user.id);
-      } else if (req.user.rol === 'Cliente') {
+      } else if (userRol === 'cliente') {
         query += " WHERE v.cliente_id = (SELECT cliente_id FROM usuarios WHERE usuario_id = ?) ";
         params.push(req.user.id);
       }
     }
 
-    query += " ORDER BY v.fecha DESC";
+    query += " ORDER BY v.fecha DESC, v.hora DESC, v.venta_id DESC";
+
+    const [rows] = await pool.query(query, params);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Obtener ventas pendientes de pago (créditos pendientes)
+router.get('/pendientes', authenticateToken, async (req, res) => {
+  try {
+    let query = `
+      SELECT v.*, c.nombre as cliente_nombre, c.telefono as cliente_telefono, u.username as vendedor_nombre
+      FROM ventas v 
+      LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
+      LEFT JOIN usuarios u ON v.usuario_id = u.usuario_id
+      WHERE v.estado_pago = 'Pendiente'
+    `;
+    let params = [];
+
+    const userRol = String(req.user?.rol || '').toLowerCase();
+    const isAdmin = userRol === 'administrador' || userRol === 'admin';
+
+    if (!isAdmin) {
+      if (userRol === 'vendedor') {
+        query += " AND v.usuario_id = ? ";
+        params.push(req.user.id);
+      } else if (userRol === 'cliente') {
+        query += " AND v.cliente_id = (SELECT cliente_id FROM usuarios WHERE usuario_id = ?) ";
+        params.push(req.user.id);
+      }
+    }
+
+    query += " ORDER BY v.fecha DESC, v.hora DESC";
 
     const [rows] = await pool.query(query, params);
     res.json(rows);
@@ -37,13 +76,29 @@ router.get('/', authenticateToken, async (req, res) => {
 // Obtener una venta específica con sus detalles
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const [venta] = await pool.query(`
+    let query = `
       SELECT v.*, c.nombre as cliente_nombre, u.username as vendedor_nombre
       FROM ventas v 
       LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
       LEFT JOIN usuarios u ON v.usuario_id = u.usuario_id
       WHERE v.venta_id = ?
-    `, [req.params.id]);
+    `;
+    let params = [req.params.id];
+
+    const userRol = String(req.user?.rol || '').toLowerCase();
+    const isAdmin = userRol === 'administrador' || userRol === 'admin';
+
+    if (!isAdmin) {
+      if (userRol === 'vendedor') {
+        query += " AND v.usuario_id = ? ";
+        params.push(req.user.id);
+      } else if (userRol === 'cliente') {
+        query += " AND v.cliente_id = (SELECT cliente_id FROM usuarios WHERE usuario_id = ?) ";
+        params.push(req.user.id);
+      }
+    }
+
+    const [venta] = await pool.query(query, params);
 
     if (venta.length === 0) return res.status(404).json({ error: "Venta no encontrada" });
 
@@ -64,11 +119,40 @@ router.post('/', authenticateToken, async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const { cliente_id, total, forma_pago, detalles = [], fecha } = req.body;
+    const { 
+      cliente_id, 
+      total, 
+      forma_pago, 
+      detalles = [], 
+      fecha, 
+      estado_pago, 
+      hora,
+      subtotal,
+      descuento,
+      envio,
+      impuesto
+    } = req.body;
+
+    const itemsSubtotal = detalles.reduce((acc, d) => acc + (Number(d.subtotal) || 0), 0);
+    const finalSubtotal = subtotal !== undefined && subtotal !== null && subtotal !== '' 
+      ? Number(subtotal) 
+      : itemsSubtotal;
+    const finalDescuento = Math.max(0, Number(descuento) || 0);
+    const finalEnvio = Math.max(0, Number(envio) || 0);
+    const finalImpuesto = Math.max(0, Number(impuesto) || 0);
+
+    const calculatedTotal = Math.max(0, finalSubtotal - finalDescuento + finalEnvio + finalImpuesto);
+    const finalTotal = total !== undefined && total !== null && total !== '' 
+      ? Number(total) 
+      : calculatedTotal;
 
     if (forma_pago === 'CreditoDia' && !cliente_id) {
       throw new Error("Se requiere un cliente identificado para ventas al crédito");
     }
+
+    const finalEstadoPago = estado_pago || (forma_pago === 'CreditoDia' ? 'Pendiente' : 'Pagado');
+    const now = new Date();
+    const finalHora = hora || now.toTimeString().split(' ')[0];
 
     // 1. Agrupar requerimientos totales de ingredientes para validar stock
     const totalRequerido = {}; // { ingrediente_id: cantidad_total }
@@ -108,8 +192,8 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Usamos req.user.id que es como se guarda en el payload del JWT en authRouter.js
     const [vResult] = await connection.query(
-      'INSERT INTO ventas (fecha, cliente_id, total, forma_pago, usuario_id) VALUES (?, ?, ?, ?, ?)',
-      [fecha || new Date().toISOString().split('T')[0], cliente_id || null, total, forma_pago, req.user.id]
+      'INSERT INTO ventas (fecha, hora, cliente_id, subtotal, descuento, envio, impuesto, total, forma_pago, usuario_id, estado_pago) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [fecha || getLocalDateString(now), finalHora, cliente_id || null, finalSubtotal, finalDescuento, finalEnvio, finalImpuesto, finalTotal, forma_pago, req.user.id, finalEstadoPago]
     );
     const ventaId = vResult.insertId;
 
@@ -118,6 +202,11 @@ router.post('/', authenticateToken, async (req, res) => {
         "UPDATE clientes SET tarjeta_snack = tarjeta_snack + 1 WHERE cliente_id = ? AND categoria = 'Snack'",
         [cliente_id]
       );
+      try {
+        await registrarEntregaVenta(connection, cliente_id, ventaId, fecha || getLocalDateString(now), detalles, req.user.id);
+      } catch (cErr) {
+        console.warn("⚠️ No se pudo registrar entrega de contenedores:", cErr.message);
+      }
     }
 
     for (const d of detalles) {
@@ -225,7 +314,30 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     await connection.beginTransaction();
     const { id } = req.params;
-    const { cliente_id, total, forma_pago, detalles = [], fecha } = req.body;
+    const { 
+      cliente_id, 
+      total, 
+      forma_pago, 
+      detalles = [], 
+      fecha,
+      subtotal,
+      descuento,
+      envio,
+      impuesto
+    } = req.body;
+
+    const itemsSubtotal = detalles.reduce((acc, d) => acc + (Number(d.subtotal) || 0), 0);
+    const finalSubtotal = subtotal !== undefined && subtotal !== null && subtotal !== '' 
+      ? Number(subtotal) 
+      : itemsSubtotal;
+    const finalDescuento = Math.max(0, Number(descuento) || 0);
+    const finalEnvio = Math.max(0, Number(envio) || 0);
+    const finalImpuesto = Math.max(0, Number(impuesto) || 0);
+
+    const calculatedTotal = Math.max(0, finalSubtotal - finalDescuento + finalEnvio + finalImpuesto);
+    const finalTotal = total !== undefined && total !== null && total !== '' 
+      ? Number(total) 
+      : calculatedTotal;
 
     // --- PASO 1: REVERTIR ESTADO ANTERIOR ---
     const [oldVenta] = await connection.query('SELECT cliente_id FROM ventas WHERE venta_id = ?', [id]);
@@ -246,8 +358,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // --- PASO 2: APLICAR NUEVOS DATOS ---
     await connection.query(
-      'UPDATE ventas SET cliente_id = ?, total = ?, forma_pago = ?, fecha = ? WHERE venta_id = ?',
-      [cliente_id || null, total, forma_pago, fecha || new Date().toISOString().split('T')[0], id]
+      'UPDATE ventas SET cliente_id = ?, subtotal = ?, descuento = ?, envio = ?, impuesto = ?, total = ?, forma_pago = ?, fecha = ? WHERE venta_id = ?',
+      [cliente_id || null, finalSubtotal, finalDescuento, finalEnvio, finalImpuesto, finalTotal, forma_pago, fecha || getLocalDateString(), id]
     );
 
     await connection.query('DELETE FROM detalle_venta WHERE venta_id = ?', [id]);
@@ -282,6 +394,31 @@ router.put('/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     connection.release();
+  }
+});
+
+// Cambiar estado de pago (Marcar como Pagado o Pendiente)
+router.put('/:id/estado-pago', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { estado_pago } = req.body;
+    if (!['Pagado', 'Pendiente'].includes(estado_pago)) {
+      return res.status(400).json({ error: "Estado de pago inválido" });
+    }
+
+    const userRol = String(req.user?.rol || '').toLowerCase();
+    const isAdmin = userRol === 'administrador' || userRol === 'admin';
+    if (!isAdmin && userRol === 'vendedor') {
+      const [vCheck] = await pool.query("SELECT usuario_id FROM ventas WHERE venta_id = ?", [id]);
+      if (vCheck.length === 0 || vCheck[0].usuario_id !== req.user.id) {
+        return res.status(403).json({ error: "No tienes permiso para actualizar el pago de esta venta" });
+      }
+    }
+
+    await pool.query('UPDATE ventas SET estado_pago = ? WHERE venta_id = ?', [estado_pago, id]);
+    res.json({ success: true, estado_pago });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

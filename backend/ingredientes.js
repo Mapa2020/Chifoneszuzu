@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from './db.js';
 import { authenticateToken, authorizeRole } from './auth.js';
+import { getLocalDateString } from './dateUtils.js';
 
 const router = express.Router();
 
@@ -35,7 +36,7 @@ router.put('/:id', authenticateToken, authorizeRole(['Administrador']), async (r
 
   try {
     await connection.beginTransaction();
-    const fecha = new Date().toISOString().split('T')[0];
+    const fecha = getLocalDateString();
 
     // 1. Actualizar tabla principal
     await connection.query(
@@ -66,7 +67,7 @@ router.post('/ingreso', authenticateToken, async (req, res) => {
 
   try {
     await connection.beginTransaction();
-    const fecha = new Date().toISOString().split('T')[0];
+    const fecha = getLocalDateString();
     const nuevoCostoUnitario = costo / cantidad;
 
     // 1. Aumentar stock y actualizar costo unitario

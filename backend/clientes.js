@@ -17,12 +17,12 @@ router.get('/', authenticateToken, async (req, res) => {
 // Crear nuevo cliente
 router.post('/', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   try {
-    const { nombre, categoria, telefono, direccion } = req.body;
+    const { nombre, categoria, telefono, direccion, zona } = req.body;
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio" });
 
     const [result] = await pool.query(
-      'INSERT INTO clientes (nombre, categoria, telefono, direccion) VALUES (?, ?, ?, ?)',
-      [nombre, categoria || 'Snack', telefono || null, direccion || null]
+      'INSERT INTO clientes (nombre, categoria, telefono, direccion, zona) VALUES (?, ?, ?, ?, ?)',
+      [nombre, categoria || 'Snack', telefono || null, direccion || null, zona || 'OTROS']
     );
     res.json({ success: true, cliente_id: result.insertId });
   } catch (error) {
@@ -34,10 +34,10 @@ router.post('/', authenticateToken, authorizeRole(['Administrador']), async (req
 router.put('/:id', authenticateToken, authorizeRole(['Administrador']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, categoria, telefono, direccion } = req.body;
+    const { nombre, categoria, telefono, direccion, zona } = req.body;
     await pool.query(
-      'UPDATE clientes SET nombre = ?, categoria = ?, telefono = ?, direccion = ? WHERE cliente_id = ?',
-      [nombre, categoria, telefono, direccion, id]
+      'UPDATE clientes SET nombre = ?, categoria = ?, telefono = ?, direccion = ?, zona = ? WHERE cliente_id = ?',
+      [nombre, categoria, telefono, direccion, zona || 'OTROS', id]
     );
     res.json({ success: true });
   } catch (error) {

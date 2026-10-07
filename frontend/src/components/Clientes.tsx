@@ -36,7 +36,8 @@ export default function Clientes() {
     nombre: '',
     categoria: 'Snack' as 'Snack' | 'Externo' | 'Especial',
     telefono: '',
-    direccion: ''
+    direccion: '',
+    zona: 'RAMADA'
   });
 
   const fetchClientes = useCallback(() => {
@@ -73,11 +74,12 @@ export default function Clientes() {
         nombre: cliente.nombre,
         categoria: cliente.categoria,
         telefono: cliente.telefono,
-        direccion: cliente.direccion
+        direccion: cliente.direccion,
+        zona: cliente.zona || 'OTROS'
       });
     } else {
       setEditingId(null);
-      setFormData({ nombre: '', categoria: 'Snack', telefono: '', direccion: '' });
+      setFormData({ nombre: '', categoria: 'Snack', telefono: '', direccion: '', zona: 'RAMADA' });
     }
     setShowModal(true);
   };
@@ -179,6 +181,22 @@ export default function Clientes() {
           {info.getValue()}
         </div>
       ),
+    }),
+    columnHelper.accessor('zona', {
+      header: 'Zona Despacho',
+      cell: info => {
+        const z = info.getValue() || 'OTROS';
+        return (
+          <span className={cn(
+            "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold",
+            z === 'RAMADA' ? "bg-amber-100 text-amber-800" :
+            z === 'U.A.G.R.M' ? "bg-emerald-100 text-emerald-800" :
+            "bg-slate-100 text-slate-700"
+          )}>
+            {z}
+          </span>
+        );
+      }
     }),
     columnHelper.accessor('tarjeta_snack', {
       header: 'Tarjeta Snack',
@@ -329,6 +347,28 @@ export default function Clientes() {
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">Dirección</label>
                 <input className="w-full p-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-orange-500" value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">Zona / Destino de Despacho</label>
+                <div className="flex gap-2">
+                  <select 
+                    className="w-1/3 p-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-orange-500 font-bold text-xs"
+                    value={['RAMADA', 'U.A.G.R.M', 'OTROS'].includes(formData.zona) ? formData.zona : 'OTROS'}
+                    onChange={e => setFormData({...formData, zona: e.target.value})}
+                  >
+                    <option value="RAMADA">RAMADA</option>
+                    <option value="U.A.G.R.M">U.A.G.R.M</option>
+                    <option value="OTROS">Otra...</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Nombre de la zona (ej. RAMADA, U.A.G.R.M)..."
+                    className="flex-1 p-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-orange-500 text-xs font-bold"
+                    value={formData.zona}
+                    onChange={e => setFormData({...formData, zona: e.target.value.toUpperCase()})}
+                  />
+                </div>
               </div>
 
               <div className="pt-4 flex gap-3">

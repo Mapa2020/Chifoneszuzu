@@ -87,6 +87,10 @@ export default function ReporteMensual() {
         
         // Filtrar ventas del mes seleccionado localmente para la tabla de clientes
         const filtered = allVentas.filter((v: Venta) => {
+          const parts = String(v.fecha).split('T')[0].split('-');
+          if (parts.length === 3) {
+            return parseInt(parts[0], 10) === selectedDate.year && parseInt(parts[1], 10) === selectedDate.month;
+          }
           const d = new Date(v.fecha);
           return d.getFullYear() === selectedDate.year && (d.getMonth() + 1) === selectedDate.month;
         });
@@ -145,7 +149,7 @@ export default function ReporteMensual() {
 
   // Configuración de Gráficos
   const lineChartData = {
-    labels: report?.details.dailySales.map(d => new Date(d.fecha).getDate()) || [],
+    labels: report?.details.dailySales.map(d => parseInt(String(d.fecha).split('T')[0].split('-')[2] || '0', 10)) || [],
     datasets: [{
       label: 'Ventas Diarias',
       data: report?.details.dailySales.map(d => d.total) || [],
