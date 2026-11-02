@@ -1,0 +1,61 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: zuzu_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      # Expuesto solo localmente en el host VPS para evitar escaneos externos no deseados
+      - "${DB_HOST_BIND:-127.0.0.1}:${DB_PORT:-3306}:3306"
+    volumes:
+      - zuzu_db_data:/var/lib/mysql
+      - ./docker-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - zuzu_network
+
+  backend:
+    image: ghcr.io/mapa2020/chifoneszuzu-backend:latest
+    container_name: zuzu_backend
+    restart: always
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    environment:
+      - DB_HOST=db
+      - BACKEND_PORT=3001
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - zuzu_network
+
+  frontend:
+    image: ghcr.io/mapa2020/chifoneszuzu-frontend:latest
+    container_name: zuzu_frontend
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8085}:80"
+    environment:
+      - VITE_API_URL=/api
+    depends_on:
+      - backend
+    networks:
+      - zuzu_network
+
+volumes:
+  zuzu_db_data:
+
+networks:
+  zuzu_network:
+    driver: bridge

@@ -15,9 +15,10 @@ echo  [2] Actualizar solo Backend (rápido)
 echo  [3] Actualizar solo Frontend (rápido)
 echo  [4] Reiniciar contenedores (sin compilar de nuevo)
 echo  [5] Ver estado y últimos logs
+echo  [6] Configurar Firewall (permitir acceso desde celular / red)
 echo  [0] Salir
 echo.
-set /p opt="Ingresa tu opción (1-5, o presiona Enter para [1]): "
+set /p opt="Ingresa tu opción (1-6, o presiona Enter para [1]): "
 
 if "%opt%"=="" goto opt1
 if "%opt%"=="1" goto opt1
@@ -25,6 +26,7 @@ if "%opt%"=="2" goto opt2
 if "%opt%"=="3" goto opt3
 if "%opt%"=="4" goto opt4
 if "%opt%"=="5" goto opt5
+if "%opt%"=="6" goto opt6
 if "%opt%"=="0" goto end
 echo Opción inválida. Intenta nuevamente.
 goto menu
@@ -70,6 +72,10 @@ echo Últimos logs del Backend:
 docker compose logs --tail 25 backend
 goto end_pause
 
+:opt6
+call "%~dp0abrir_puertos_firewall.bat"
+goto menu
+
 :finish
 echo.
 echo ===================================================
@@ -79,9 +85,10 @@ docker compose ps
 echo.
 echo ===================================================
 echo   ACCESOS ACTIVOS:
-echo   - Frontend: http://localhost:8085
-echo   - Backend:  http://localhost:3001
-echo   - Base DB:  localhost:3309 (bdchifon)
+echo   - PC Local:  http://localhost:8085
+echo   - Celular:   http://192.168.1.9:8085
+echo   - Backend:   http://localhost:3001
+echo   - Base DB:   localhost:3309 (bdchifon)
 echo ===================================================
 echo.
 echo ¡Actualización completada con éxito!

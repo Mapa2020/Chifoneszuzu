@@ -1,31 +1,38 @@
 # Dependencias
 node_modules/
-jspdf/
+*/node_modules/
 
-# Compilación
-dist/
-build/
-*.local
-
-# Variables de entorno (¡MUY IMPORTANTE!)
+# Entorno y variables sensibles (NUNCA subir a git)
 .env
-.env.production
-.env.development
+.env.local
+.env.*.local
+!.env.example
 
-# Docker
+# Compilados y distribuciones
+dist/
+frontend/dist/
+build/
+
+# Backups y zips locales
+backups/
+backend/backups/
+*.zip
+*.tar.gz
+
+# Base de datos y volúmenes locales
+*.sqlite
 zuzu_db_data/
 
 # Logs
+*.log
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Editores
-.vscode/
+# Sistema y editores
+.DS_Store
+Thumbs.db
 .idea/
-DS_Store
+.vscode/
 
-# Respaldos
-backups/
-backend/backups/
-*.zip
